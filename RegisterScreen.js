@@ -1,33 +1,53 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 
-const LoginScreen = ({ navigation }) => {
+const RegisterScreen = ({ navigation }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [name, setName] = useState('');
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Turnify</Text>
       <TextInput
         style={styles.input}
-        placeholder="Email"
+        placeholder="Nombre"
         placeholderTextColor="#888"
-        keyboardType="email-address"
+        value={name}
+        onChangeText={setName}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Correo electrónico"
+        placeholderTextColor="#888"
+        value={email}
+        onChangeText={setEmail}
         autoCapitalize="none"
       />
       <TextInput
         style={styles.input}
         placeholder="Contraseña"
         placeholderTextColor="#888"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Confirmar contraseña"
+        placeholderTextColor="#888"
+        value={confirmPassword}
+        onChangeText={setConfirmPassword}
         secureTextEntry
       />
       <TouchableOpacity style={styles.button}>
-        <Text style={styles.buttonText}>Iniciar sesión</Text>
+        <Text style={styles.buttonText}>Registrarse</Text>
       </TouchableOpacity>
-      <TouchableOpacity>
-        <Text style={styles.forgotText}>Recuperar contraseña</Text>
-      </TouchableOpacity>
-      <View style={styles.registerContainer}>
-        <Text style={styles.registerText}>No tienes una cuenta? </Text>
-        <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-          <Text style={styles.registerLink}>Registrate</Text>
+      <View style={styles.loginContainer}>
+        <Text style={styles.loginText}>Ya tienes una cuenta? </Text>
+        <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+          <Text style={styles.loginLink}>Inicia sesión</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -74,28 +94,22 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 18,
   },
-  forgotText: {
-    color: '#fff',
-    textAlign: 'center',
-    marginBottom: 32,
-    textDecorationLine: 'underline',
-  },
-  registerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    position: 'absolute',
-    bottom: 32,
-  },
-  registerText: {
-    color: '#fff',
-    fontSize: 16,
-  },
-  registerLink: {
+  loginLink: {
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
     textDecorationLine: 'underline',
   },
+  loginContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'absolute',
+    bottom: 32,
+  },
+  loginText: {
+    color: '#fff',
+    fontSize: 16,
+  },
 });
 
-export default LoginScreen; 
+export default RegisterScreen;
