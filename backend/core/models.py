@@ -1,6 +1,22 @@
 from django.db import models
+from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 
-class User(models.Model):
+class UserManager(BaseUserManager):
+    def create_user(self, email, password=None, **extra_fields):
+        if not email:
+            raise ValueError('El usuario debe tener un email')
+        email = self.normalize_email(email)
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)  # Guarda la contraseña hasheada
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, email, password=None, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+        return self.create_user(email, password, **extra_fields)
+
+class User(AbstractBaseUser, PermissionsMixin):
     ROLE_CHOICES = [
         ('professional', 'Professional'),
         ('regular', 'Regular'),
@@ -8,12 +24,18 @@ class User(models.Model):
 
     name = models.CharField(max_length=45)
     email = models.EmailField(unique=True)
-    password = models.CharField(max_length=45)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES)
     created_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
+    is_staff = models.BooleanField(default=False)  # Necesario para superuser
+
+    objects = UserManager()
+
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['name', 'role']
 
     def __str__(self):
-        return self.name
+        return self.email
 
 
 class ProfessionalDetail(models.Model):
@@ -21,6 +43,7 @@ class ProfessionalDetail(models.Model):
     address = models.CharField(max_length=45)
     latitude = models.DecimalField(max_digits=9, decimal_places=6)
     longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    business_type = models.CharField(max_length=100, blank=True)
 
     def __str__(self):
         return f"Dirección de {self.professional.name}"
