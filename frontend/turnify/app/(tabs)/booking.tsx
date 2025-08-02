@@ -41,7 +41,7 @@ interface BookingData {
 }
 
 export default function BookingScreen() {
-  const { user } = useAuth();
+  const { user, authenticatedRequest } = useAuth();
   const route = useRoute();
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('');
@@ -131,7 +131,6 @@ export default function BookingScreen() {
       console.log('Enviando datos de reserva:', bookingData);
 
       // Usar la función helper de autenticación
-      const { authenticatedRequest } = useAuth();
       
       const response = await authenticatedRequest(`${API_BASE_URL}/api/appointments/create/`, {
         method: 'POST',
