@@ -8,7 +8,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 
 export function useThemeColor(
   props: { light?: string; dark?: string },
-  colorName: keyof typeof Colors.light & keyof typeof Colors.dark
+  colorName: keyof typeof Colors
 ) {
   const theme = useColorScheme() ?? 'light';
   const colorFromProps = props[theme];
@@ -16,6 +16,15 @@ export function useThemeColor(
   if (colorFromProps) {
     return colorFromProps;
   } else {
-    return Colors[theme][colorName];
+    // Mapear nombres de colores a nuestra nueva estructura
+    const colorMap: { [key: string]: string } = {
+      text: Colors.textPrimary,
+      background: Colors.background,
+      tint: Colors.secondary,
+      tabIconDefault: Colors.textTertiary,
+      tabIconSelected: Colors.secondary,
+    };
+    
+    return colorMap[colorName] || Colors.textPrimary;
   }
 }

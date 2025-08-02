@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '../../providers/AuthProvider';
+import { Colors } from '../../constants/Colors';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { signIn } = useAuth();
+  const { signIn, loading } = useAuth();
 
   const handleLogin = async () => {
     setError('');
@@ -19,16 +20,18 @@ export default function Login() {
 
     setIsLoading(true);
     try {
-      const success = await signIn(email, password);
-      if (!success) {
-        setError('Email o contraseña incorrectos.');
-      }
+    const success = await signIn(email, password);
+    if (success) {
+      router.replace('/home');  // ⬅ Redirige al Home
+    } else {
+      setError('Email o contraseña incorrectos.');
+    }
     } catch (error) {
       setError('Error al iniciar sesión. Inténtalo de nuevo.');
     } finally {
       setIsLoading(false);
-    }
-  };
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -92,7 +95,7 @@ export default function Login() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#06204F',
+    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
@@ -100,24 +103,24 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 40,
     fontWeight: 'bold',
-    color: '#fff',
+    color: Colors.textInverse,
     marginBottom: 48,
   },
   input: {
     width: '100%',
     height: 48,
-    backgroundColor: '#fff',
+    backgroundColor: Colors.background,
     borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#06204F',
+    borderColor: Colors.border,
   },
   button: {
     width: '100%',
     height: 48,
-    backgroundColor: '#2B5FC7',
+    backgroundColor: Colors.secondary,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -125,15 +128,15 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   buttonDisabled: {
-    backgroundColor: '#888',
+    backgroundColor: Colors.textTertiary,
   },
   buttonText: {
-    color: '#fff',
+    color: Colors.textInverse,
     fontWeight: 'bold',
     fontSize: 18,
   },
   forgotText: {
-    color: '#fff',
+    color: Colors.textInverse,
     textAlign: 'center',
     marginBottom: 32,
     textDecorationLine: 'underline',
@@ -145,11 +148,11 @@ const styles = StyleSheet.create({
     bottom: 32,
   },
   registerText: {
-    color: '#fff',
+    color: Colors.textInverse,
     fontSize: 16,
   },
   registerLink: {
-    color: '#fff',
+    color: Colors.textInverse,
     fontWeight: 'bold',
     fontSize: 16,
     textDecorationLine: 'underline',
@@ -158,7 +161,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   errorText: {
-    color: '#ff6b6b',
+    color: Colors.error,
     textAlign: 'center',
     marginTop: 16,
     fontSize: 14,

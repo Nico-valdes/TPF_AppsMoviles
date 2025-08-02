@@ -5,7 +5,8 @@ from .views import (
     UserViewSet, ProfessionalDetailViewSet, ScheduleViewSet,
     AppointmentViewSet, ChatViewSet, MessageViewSet, RegisterView, 
     CustomTokenObtainPairView, CurrentUserView, UpcomingAppointmentsView,
-    BecomeProfessionalView,
+    BecomeProfessionalView, ProfessionalsListView, ProfessionalDetailView,
+    CreateAppointmentView, UpdateAppointmentStatusView, ReviewView, NotificationsView,
 )
 
 router = DefaultRouter()
@@ -20,10 +21,25 @@ urlpatterns = [
     path('users/me/', CurrentUserView.as_view(), name='current_user'),
     path('appointments/upcoming/', UpcomingAppointmentsView.as_view(), name='upcoming_appointments'),
     path('users/become-professional/', BecomeProfessionalView.as_view(), name='become_professional'),
+    
+    # Profesionales
+    path('professionals/', ProfessionalsListView.as_view(), name='professionals_list'),
+    path('professionals/<int:professional_id>/', ProfessionalDetailView.as_view(), name='professional_detail'),
+    
+    # Turnos
+    path('appointments/create/', CreateAppointmentView.as_view(), name='create_appointment'),
+    path('appointments/<int:appointment_id>/status/', UpdateAppointmentStatusView.as_view(), name='update_appointment_status'),
+    
+    # Reseñas
+    path('reviews/', ReviewView.as_view(), name='create_review'),
+    
+    # Notificaciones
+    path('notifications/', NotificationsView.as_view(), name='notifications'),
+    path('notifications/<int:notification_id>/read/', NotificationsView.as_view(), name='mark_notification_read'),
+    
     path('', include(router.urls)),
     path('register/', RegisterView.as_view(), name='register'),
     path('token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    
 ]
 
