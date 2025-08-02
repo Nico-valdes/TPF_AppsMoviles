@@ -2,9 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export default function Calendar() {
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+}
 
-    const [user, setUser] = useState(null);
+export default function Calendar() {
+    const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -54,5 +60,27 @@ export default function Calendar() {
 }
 
 const styles = StyleSheet.create({
-    container: { backgroundColor: '#F5F7FA'},
+    container: { backgroundColor: '#F5F7FA', flex: 1 },
+    header: {
+        backgroundColor: '#06204F',
+        paddingHorizontal: 20,
+        paddingTop: 30,
+        paddingBottom: 30,
+        borderBottomLeftRadius: 25,
+        borderBottomRightRadius: 25,
+    },
+    welcome: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
+    subTitle: { fontSize: 14, color: '#fff', marginTop: 10 },
+    content: { padding: 20 },
+    sectionTitle: { fontSize: 18, fontWeight: '600', marginBottom: 15 },
+    appointmentCard: {
+        backgroundColor: '#fff',
+        padding: 15,
+        borderRadius: 12,
+        marginBottom: 15,
+        shadowColor: '#000',
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
+    }
 });

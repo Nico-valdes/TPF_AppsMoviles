@@ -5,6 +5,6 @@ export default function AuthLayout() {
     <Stack>
       <Stack.Screen name="login" options={{ headerShown: false }} />
       <Stack.Screen name="register" options={{ headerShown: false }}/>
-    </Stack>
-  );
+    </Stack>
+  );
 }

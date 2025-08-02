@@ -34,12 +34,12 @@ export default function Professionals() {
 
       <View style={styles.grid}>
         {[
-          { name: 'Peluquero', icon: '💇‍♂️' },
+          { name: 'Peluquero', icon: '💇‍♂' },
           { name: 'Dentista', icon: '🦷' },
-          { name: 'Restaurante', icon: '🍽️' },
+          { name: 'Restaurante', icon: '🍽' },
           { name: 'Nutricionista', icon: '🥗' },
           { name: 'Profesor', icon: '👨‍🏫' },
-          { name: 'Entrenador', icon: '🏋️‍♂️' },
+          { name: 'Entrenador', icon: '🏋‍♂' },
         ].map((item, idx) => (
           <TouchableOpacity key={idx} style={styles.card}>
             <Text style={{ fontSize: 32 }}>{item.icon}</Text>
@@ -139,5 +139,5 @@ const styles = StyleSheet.create({
   proAvatar: { width: 50, height: 50, borderRadius: 25, marginRight: 12 },
   proName: { fontSize: 14, fontWeight: '700', color: '#333' },
   proRole: { fontSize: 12, color: '#666' },
-  proDistance: { fontSize: 12, color: '#888', marginTop: 2 },
+  proDistance: { fontSize: 12, color: '#888', marginTop: 2 },
 });

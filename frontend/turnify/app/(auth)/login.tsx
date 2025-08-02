@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '../../providers/AuthProvider';
 
@@ -7,7 +7,8 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const { signIn, loading } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
+  const { signIn } = useAuth();
 
   const handleLogin = async () => {
     setError('');
@@ -16,11 +17,16 @@ export default function Login() {
       return;
     }
 
-    const success = await signIn(email, password);
-    if (success) {
-      router.replace('/(tabs)/home');
-    } else {
-      setError('Email o contraseña incorrectos.');
+    setIsLoading(true);
+    try {
+      const success = await signIn(email, password);
+      if (!success) {
+        setError('Email o contraseña incorrectos.');
+      }
+    } catch (error) {
+      setError('Error al iniciar sesión. Inténtalo de nuevo.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -35,6 +41,7 @@ export default function Login() {
         autoCapitalize="none"
         value={email} 
         onChangeText={setEmail}
+        editable={!isLoading}
       />
       <TextInput
         style={styles.input}
@@ -43,29 +50,44 @@ export default function Login() {
         value={password} 
         onChangeText={setPassword}
         secureTextEntry
+        editable={!isLoading}
       />
       <TouchableOpacity 
-        style={[styles.button, loading && styles.buttonDisabled]} 
+        style={[styles.button, isLoading && styles.buttonDisabled]} 
         onPress={handleLogin}
-        disabled={loading}
+        disabled={isLoading}
       >
-        <Text style={styles.buttonText}>
-          {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
+        {isLoading ? (
+          <ActivityIndicator color="#fff" size="small" />
+        ) : (
+          <Text style={styles.buttonText}>Iniciar sesión</Text>
+        )}
+      </TouchableOpacity>
+      
+      <TouchableOpacity disabled={isLoading}>
+        <Text style={[styles.forgotText, isLoading && styles.disabledText]}>
+          Recuperar contraseña
         </Text>
       </TouchableOpacity>
-      <TouchableOpacity>
-        <Text style={styles.forgotText}>Recuperar contraseña</Text>
-      </TouchableOpacity>
+      
       <View style={styles.registerContainer}>
         <Text style={styles.registerText}>No tienes una cuenta? </Text>
-        <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
-          <Text style={styles.registerLink}>Registrate</Text>
+        <TouchableOpacity 
+          onPress={() => router.push('/(auth)/register')}
+          disabled={isLoading}
+        >
+          <Text style={[styles.registerLink, isLoading && styles.disabledText]}>
+            Registrate
+          </Text>
         </TouchableOpacity>
       </View>
-      {error ? <Text style={{ color: 'red', textAlign: 'center', marginTop: 16 }}>{error}</Text> : null}
+      
+      {error ? (
+        <Text style={styles.errorText}>{error}</Text>
+      ) : null}
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
@@ -131,5 +153,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
     textDecorationLine: 'underline',
+  },
+  disabledText: {
+    opacity: 0.5,
+  },
+  errorText: {
+    color: '#ff6b6b',
+    textAlign: 'center',
+    marginTop: 16,
+    fontSize: 14,
   },
 });

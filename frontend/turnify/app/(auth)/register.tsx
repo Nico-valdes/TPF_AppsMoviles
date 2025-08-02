@@ -7,7 +7,7 @@ export default function Register() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
-  const [role, setRole] = useState('regular'); // Puedes cambiarlo según tu lógica
+  const [role, setRole] = useState('regular');
   const [error, setError] = useState('');
 
   const handleRegister = async () => {
@@ -139,6 +139,6 @@ const styles = StyleSheet.create({
   },
   loginText: {
     color: '#fff',
-    fontSize: 16,
-  },
+    fontSize: 16,
+  },
 });

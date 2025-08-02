@@ -11,17 +11,17 @@ import Perfil from './perfil';
 const Tab = createBottomTabNavigator();
 
 export default function AppLayout() {
-  const { user, loading } = useAuth();
+  const { user, isLoading } = useAuth();
 
   useEffect(() => {
-    if (!loading && !user) {
+    if (!isLoading && !user) {
       // Si no está cargando y no hay usuario, redirigir a login
       router.replace('/(auth)/login');
     }
-  }, [user, loading]);
+  }, [user, isLoading]);
 
   // Si está cargando, mostrar pantalla de carga
-  if (loading) {
+  if (isLoading) {
     return null; // O puedes mostrar un spinner aquí
   }
 

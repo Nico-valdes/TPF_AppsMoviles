@@ -3,7 +3,6 @@ import { View, Text, TouchableOpacity, StyleSheet, Modal, Pressable } from 'reac
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../providers/AuthProvider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import BecomeProfessionalForm from '../../components/BecomeProfessionalForm';
 
 export default function Perfil() {
   const { signOut } = useAuth();
@@ -29,41 +28,6 @@ export default function Perfil() {
     fetchUser();
   }, []);
 
-  const handleBecomeProfessional = async () => {
-    if (!latitude || !longitude || !address) {
-      alert('Por favor completa todos los campos');
-      return;
-    }
-
-    try {
-      const token = await AsyncStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/professional-details/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          address: address,
-          latitude: parseFloat(latitude),
-          longitude: parseFloat(longitude),
-          professional: user.id, // se guarda el ID del usuario actual
-        }),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        console.log('Error creando ProfessionalDetail:', errorData);
-        alert('Error al registrar como profesional');
-        return;
-      }
-
-      alert('¡Ahora eres profesional!');
-    } catch (error) {
-      console.log('Error al enviar datos:', error);
-      alert('Error de conexión');
-    }
-  };
 
   return (
     <View style={styles.container}>
@@ -90,9 +54,6 @@ export default function Perfil() {
         <View style={styles.centeredView}>
           <View style={styles.modalView}>
             {/* Aquí se renderiza el formulario */}
-            <BecomeProfessionalForm 
-              onClose={() => setModalVisible(false)} 
-            />
             {/* Botón para cerrar el modal si es necesario */}
             <Pressable
               style={[styles.button, styles.buttonClose]}
@@ -197,5 +158,5 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     textAlign: 'center',
-  },
+  },
 });
