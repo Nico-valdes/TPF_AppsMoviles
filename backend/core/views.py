@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timedelta
 from rest_framework import viewsets, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -7,6 +7,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.contrib.auth.hashers import make_password
 from django.db import models
+from django.utils import timezone
 from .models import User, ProfessionalDetail, Schedule, Appointment, Chat, Message, Review, Notification
 from .serializers import (
     UserSerializer, ProfessionalDetailSerializer, ProfessionalListSerializer, ScheduleSerializer,
@@ -234,14 +235,12 @@ class CreateAppointmentView(APIView):
             time_slot = data.pop('timeSlot')
             print(f"TimeSlot recibido: {time_slot}")
             # Convertir formato "HH:MM" a objeto Time
-            from datetime import datetime
             try:
                 time_obj = datetime.strptime(time_slot, '%H:%M').time()
                 data['start_time'] = time_obj
                 print(f"Time convertido: {time_obj}")
                 
                 # Calcular end_time (1 hora después)
-                from datetime import timedelta
                 start_datetime = datetime.combine(datetime.today(), time_obj)
                 end_datetime = start_datetime + timedelta(hours=1)
                 data['end_time'] = end_datetime.time()
@@ -372,3 +371,106 @@ class NotificationsView(APIView):
             return Response({'message': 'Notificación marcada como leída'})
         except Notification.DoesNotExist:
             return Response({'error': 'Notificación no encontrada'}, status=status.HTTP_404_NOT_FOUND)
+
+class AvailableSlotsView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, professional_id):
+        from datetime import datetime, timedelta
+        from django.utils import timezone
+        
+        print(f"🔍 AvailableSlotsView llamado - Professional ID: {professional_id}")
+        date_str = request.GET.get('date')
+        print(f"📅 Fecha recibida: {date_str}")
+        
+        if not date_str:
+            return Response(
+                {'error': 'El parámetro date es requerido'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Convertir la fecha string a objeto date
+            selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            print(f"📅 Fecha parseada: {selected_date}")
+            
+            # Obtener el día de la semana (0 = lunes, 6 = domingo)
+            day_of_week = selected_date.weekday()
+            print(f"📅 Día de la semana: {day_of_week}")
+            
+            # Buscar el horario del profesional para ese día
+            try:
+                schedule = Schedule.objects.get(
+                    professional_id=professional_id,
+                    day_week=day_of_week
+                )
+                print(f"✅ Horario encontrado: {schedule.start_time} - {schedule.end_time}")
+            except Schedule.DoesNotExist:
+                print(f"❌ No hay horario para el día {day_of_week}")
+                
+                # Verificar qué horarios tiene este profesional
+                all_schedules = Schedule.objects.filter(professional_id=professional_id)
+                print(f"📋 Horarios totales del profesional {professional_id}: {all_schedules.count()}")
+                
+                for s in all_schedules:
+                    print(f"  • Día {s.day_week}: {s.start_time} - {s.end_time}")
+                
+                return Response({
+                    'professional_id': professional_id,
+                    'date': date_str,
+                    'day_of_week': day_of_week,
+                    'available_slots': [],
+                    'message': f'No hay horarios disponibles para este día'
+                })
+            
+            # Generar slots de 30 minutos
+            available_slots = []
+            current_time = schedule.start_time
+            
+            while current_time < schedule.end_time:
+                slot_time = current_time.strftime('%H:%M')
+                available_slots.append(slot_time)
+                
+                # Avanzar 30 minutos
+                current_time = (datetime.combine(date.today(), current_time) + timedelta(minutes=30)).time()
+            
+            print(f"⏰ Slots generados: {available_slots}")
+            
+            # Filtrar slots que ya tienen citas
+            existing_appointments = Appointment.objects.filter(
+                professional_id=professional_id,
+                date=selected_date
+            ).values_list('start_time', flat=True)
+            
+            print(f"📋 Citas existentes: {list(existing_appointments)}")
+            
+            # Remover slots ocupados
+            occupied_slots = [appt.strftime('%H:%M') for appt in existing_appointments]
+            available_slots = [slot for slot in available_slots if slot not in occupied_slots]
+            
+            print(f"📊 Total de slots disponibles: {len(available_slots)}")
+            
+            response_data = {
+                'professional_id': professional_id,
+                'date': date_str,
+                'day_of_week': day_of_week,
+                'schedule_start': schedule.start_time.strftime('%H:%M'),
+                'schedule_end': schedule.end_time.strftime('%H:%M'),
+                'available_slots': available_slots
+            }
+            
+            print(f"📤 Enviando respuesta: {response_data}")
+            return Response(response_data)
+            
+        except ValueError as e:
+            print(f"❌ Error parseando fecha: {e}")
+            return Response(
+                {'error': 'Formato de fecha inválido. Use YYYY-MM-DD'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            print(f"❌ Error inesperado: {e}")
+            return Response(
+                {'error': 'Error interno del servidor'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

@@ -11,6 +11,7 @@ import {
   Platform,
   Modal,
   Image,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../providers/AuthProvider';
@@ -45,13 +46,74 @@ export default function BookingDetails() {
   const [service, setService] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const timeSlots = [
-    '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
-    '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
-    '15:00', '15:30', '16:00', '16:30', '17:00', '17:30',
-    '18:00', '18:30', '19:00', '19:30', '20:00', '20:30'
-  ];
+  // Efecto para obtener horarios cuando cambia la fecha
+  useEffect(() => {
+    if (selectedDate) {
+      // Limpiar horarios anteriores
+      setAvailableSlots([]);
+      setSelectedTime('');
+      fetchAvailableSlots(selectedDate);
+    }
+  }, [selectedDate]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    setRefreshing(false);
+  };
+
+  // Función para obtener horarios disponibles
+  const fetchAvailableSlots = async (date: string) => {
+    if (!date) return;
+    
+    setLoadingSlots(true);
+    setAvailableSlots([]); // Limpiar slots anteriores
+    
+    try {
+      const url = `${API_BASE_URL}/api/professionals/${selectedProfessional.id}/available-slots/?date=${date}`;
+      console.log('🔍 Llamando a:', url);
+      console.log('📅 Fecha seleccionada:', date);
+      console.log('👤 ID del profesional:', selectedProfessional.id);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      console.log('📊 Response status:', response.status);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Datos recibidos:', data);
+        setAvailableSlots(data.available_slots || []);
+        console.log('⏰ Horarios disponibles:', data.available_slots);
+      } else {
+        // Intentar leer el error como texto primero
+        const errorText = await response.text();
+        console.error('❌ Error response text:', errorText);
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          console.error('❌ Error obteniendo horarios:', errorData);
+        } catch (parseError) {
+          console.error('❌ Error parseando JSON:', parseError);
+          console.error('📄 Respuesta completa:', errorText);
+        }
+        
+        setAvailableSlots([]);
+      }
+    } catch (error) {
+      console.error('❌ Error de conexión:', error);
+      setAvailableSlots([]);
+    } finally {
+      setLoadingSlots(false);
+    }
+  };
 
   const handleBooking = async () => {
     if (!selectedDate || !selectedTime || !service.trim()) {
@@ -135,6 +197,10 @@ export default function BookingDetails() {
   };
 
   const showTimeSelector = () => {
+    if (!selectedDate) {
+      Alert.alert('Error', 'Por favor selecciona una fecha primero');
+      return;
+    }
     console.log('Botón de hora presionado');
     setShowTimeModal(true);
   };
@@ -150,7 +216,15 @@ export default function BookingDetails() {
 
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView 
+      style={styles.container}
+      contentContainerStyle={{ 
+        paddingBottom: 150,
+      }}
+      showsVerticalScrollIndicator={true}
+      scrollEnabled={true}
+      nestedScrollEnabled={true}
+    >
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -243,18 +317,32 @@ export default function BookingDetails() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Selecciona una hora</Text>
         
-        {/* Selector de hora desplegable */}
-        <TouchableOpacity
-          style={styles.timeSelectorButton}
-          onPress={showTimeSelector}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="time" size={20} color={Colors.textSecondary} />
-          <Text style={styles.timeSelectorText}>
-            {selectedTime || 'Seleccionar hora'}
-          </Text>
-          <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
-        </TouchableOpacity>
+                 {/* Selector de hora desplegable */}
+         <TouchableOpacity
+           style={[
+             styles.timeSelectorButton,
+             !selectedDate && styles.timeSelectorButtonDisabled
+           ]}
+           onPress={showTimeSelector}
+           activeOpacity={0.7}
+           disabled={!selectedDate}
+         >
+           <Ionicons name="time" size={20} color={Colors.textSecondary} />
+           <Text style={[
+             styles.timeSelectorText,
+             !selectedDate && styles.timeSelectorTextDisabled
+           ]}>
+             {selectedTime || (selectedDate ? 'Seleccionar hora' : 'Selecciona una fecha primero')}
+           </Text>
+           <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
+         </TouchableOpacity>
+         
+         {/* Indicador de estado */}
+         {selectedDate && !loadingSlots && availableSlots.length === 0 && (
+           <Text style={styles.noSlotsMessage}>
+             No hay horarios disponibles para el {selectedDate}
+           </Text>
+         )}
       </View>
 
       {/* Servicio */}
@@ -287,7 +375,12 @@ export default function BookingDetails() {
       {/* Botón de confirmar reserva */}
       <View style={styles.buttonContainer}>
         <TouchableOpacity
-          style={[styles.bookButton, loading && styles.bookButtonDisabled]}
+          style={[
+            styles.bookButton, 
+            loading && styles.bookButtonDisabled,
+            // Resaltar cuando todos los campos estén completos
+            selectedDate && selectedTime && service.trim() && styles.bookButtonReady
+          ]}
           onPress={handleBooking}
           disabled={loading}
         >
@@ -300,7 +393,28 @@ export default function BookingDetails() {
             </>
           )}
         </TouchableOpacity>
+        
+        {/* Indicador de progreso */}
+        {selectedDate && selectedTime && service.trim() && (
+          <Text style={styles.readyMessage}>
+            ✅ Todos los campos completos - Listo para reservar
+          </Text>
+        )}
       </View>
+      
+      {/* Botón flotante para web */}
+      {Platform.OS === 'web' && selectedDate && selectedTime && service.trim() && (
+        <View style={styles.floatingButton}>
+          <TouchableOpacity
+            style={styles.floatingButtonTouchable}
+            onPress={handleBooking}
+            disabled={loading}
+          >
+            <Ionicons name="calendar" size={24} color={Colors.textInverse} />
+            <Text style={styles.floatingButtonText}>Confirmar Reserva</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Modal desplegable de horarios */}
       <Modal
@@ -323,23 +437,31 @@ export default function BookingDetails() {
             
             <ScrollView style={styles.modalScrollView}>
               <View style={styles.modalTimeGrid}>
-                {timeSlots.map((time) => (
-                  <TouchableOpacity
-                    key={time}
-                    style={[
-                      styles.modalTimeSlot,
-                      selectedTime === time && styles.modalTimeSlotSelected
-                    ]}
-                    onPress={() => selectTime(time)}
-                  >
-                    <Text style={[
-                      styles.modalTimeSlotText,
-                      selectedTime === time && styles.modalTimeSlotTextSelected
-                    ]}>
-                      {time}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                {loadingSlots ? (
+                  <ActivityIndicator size="small" color={Colors.secondary} />
+                ) : availableSlots.length === 0 ? (
+                  <Text style={styles.noSlotsText}>
+                    No hay horarios disponibles para esta fecha.
+                  </Text>
+                ) : (
+                  availableSlots.map((time) => (
+                    <TouchableOpacity
+                      key={time}
+                      style={[
+                        styles.modalTimeSlot,
+                        selectedTime === time && styles.modalTimeSlotSelected
+                      ]}
+                      onPress={() => selectTime(time)}
+                    >
+                      <Text style={[
+                        styles.modalTimeSlotText,
+                        selectedTime === time && styles.modalTimeSlotTextSelected
+                      ]}>
+                        {time}
+                      </Text>
+                    </TouchableOpacity>
+                  ))
+                )}
               </View>
             </ScrollView>
           </View>
@@ -467,6 +589,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.textPrimary,
   },
+  timeSelectorButtonDisabled: {
+    opacity: 0.5,
+    backgroundColor: Colors.background,
+  },
+  timeSelectorTextDisabled: {
+    color: Colors.textTertiary,
+  },
+  noSlotsMessage: {
+    fontSize: 14,
+    color: Colors.error,
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
 
   input: {
     backgroundColor: Colors.background,
@@ -484,7 +620,8 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     marginHorizontal: 20,
-    marginBottom: 100, // Aumentado para evitar que el nav lo tape
+    marginBottom: 300, // Aumentado significativamente para web
+    paddingBottom: 20,
   },
   bookButton: {
     backgroundColor: Colors.secondary,
@@ -494,9 +631,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    // Estilos específicos para web
+    ...(Platform.OS === 'web' && {
+      minHeight: 60,
+      fontSize: 18,
+      fontWeight: 'bold',
+      boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+      position: 'relative' as any,
+      zIndex: 1000,
+    }),
   },
   bookButtonDisabled: {
     opacity: 0.6,
+  },
+  bookButtonReady: {
+    backgroundColor: Colors.secondary,
+    opacity: 1,
+    // Estilos específicos para web cuando está listo
+    ...(Platform.OS === 'web' && {
+      transform: 'scale(1.05)',
+      transition: 'all 0.3s ease',
+    }),
   },
   bookButtonText: {
     color: Colors.textInverse,
@@ -585,5 +740,46 @@ const styles = StyleSheet.create({
   },
   modalTimeSlotTextSelected: {
     color: Colors.textInverse,
+  },
+  noSlotsText: {
+    fontSize: 16,
+    color: Colors.textTertiary,
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  readyMessage: {
+    fontSize: 14,
+    color: Colors.success,
+    textAlign: 'center',
+    marginTop: 10,
+    fontWeight: '500',
+  },
+  floatingButton: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    backgroundColor: Colors.secondary,
+    borderRadius: 30,
+    width: 60,
+    height: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  floatingButtonTouchable: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  floatingButtonText: {
+    color: Colors.textInverse,
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginTop: 4,
   },
 }); 

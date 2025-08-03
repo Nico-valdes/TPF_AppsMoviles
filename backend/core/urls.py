@@ -7,6 +7,7 @@ from .views import (
     CustomTokenObtainPairView, CurrentUserView, UpcomingAppointmentsView,
     BecomeProfessionalView, ProfessionalsListView, ProfessionalDetailView,
     CreateAppointmentView, UpdateAppointmentStatusView, ReviewView, NotificationsView,
+    AvailableSlotsView,
 )
 
 router = DefaultRouter()
@@ -25,6 +26,7 @@ urlpatterns = [
     # Profesionales
     path('professionals/', ProfessionalsListView.as_view(), name='professionals_list'),
     path('professionals/<int:professional_id>/', ProfessionalDetailView.as_view(), name='professional_detail'),
+    path('professionals/<int:professional_id>/available-slots/', AvailableSlotsView.as_view(), name='available_slots'),
     
     # Turnos
     path('appointments/create/', CreateAppointmentView.as_view(), name='create_appointment'),

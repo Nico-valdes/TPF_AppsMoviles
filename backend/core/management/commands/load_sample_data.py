@@ -1,125 +1,150 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth.hashers import make_password
-from core.models import User, ProfessionalDetail
+from core.models import User, ProfessionalDetail, Schedule
+import random
 
 class Command(BaseCommand):
-    help = 'Carga datos de ejemplo de profesionales'
+    help = 'Carga horarios para todos los profesionales existentes'
 
     def handle(self, *args, **options):
-        # Crear profesionales de ejemplo
-        professionals_data = [
+        # Verificar que existan profesionales
+        professionals = User.objects.filter(role='professional')
+        
+        if not professionals.exists():
+            self.stdout.write(
+                self.style.ERROR('❌ No hay profesionales en la base de datos. Primero crea algunos profesionales.')
+            )
+            return
+
+        self.stdout.write(f"👥 Encontrados {professionals.count()} profesionales")
+        
+        # Definir diferentes tipos de horarios para asignar aleatoriamente
+        schedule_templates = [
+            # Horario médico típico
             {
-                'name': 'Dr. María González',
-                'email': 'maria.gonzalez@example.com',
-                'role': 'professional',
-                'category': 'health',
-                'address': 'Av. Corrientes 1234, Buenos Aires',
-                'description': 'Médica clínica con más de 10 años de experiencia. Especializada en medicina general y atención primaria.',
-                'hourly_rate': 5000.00,
-                'phone': '+54 11 1234-5678',
-                'is_verified': True,
-                'rating': 4.8,
-                'total_reviews': 45
+                'name': 'Horario Médico',
+                'schedules': [
+                    {'day_week': 0, 'start_time': '08:00', 'end_time': '17:00', 'name': 'Lunes'},
+                    {'day_week': 1, 'start_time': '08:00', 'end_time': '17:00', 'name': 'Martes'},
+                    {'day_week': 2, 'start_time': '08:00', 'end_time': '17:00', 'name': 'Miércoles'},
+                    {'day_week': 3, 'start_time': '08:00', 'end_time': '17:00', 'name': 'Jueves'},
+                    {'day_week': 4, 'start_time': '08:00', 'end_time': '17:00', 'name': 'Viernes'},
+                    {'day_week': 5, 'start_time': '09:00', 'end_time': '13:00', 'name': 'Sábado'},
+                ]
             },
+            # Horario de oficina
             {
-                'name': 'Lic. Carlos Rodríguez',
-                'email': 'carlos.rodriguez@example.com',
-                'role': 'professional',
-                'category': 'legal',
-                'address': 'Florida 567, Buenos Aires',
-                'description': 'Abogado especializado en derecho laboral y comercial. Consultas y asesoramiento legal.',
-                'hourly_rate': 8000.00,
-                'phone': '+54 11 2345-6789',
-                'is_verified': True,
-                'rating': 4.9,
-                'total_reviews': 32
+                'name': 'Horario de Oficina',
+                'schedules': [
+                    {'day_week': 0, 'start_time': '09:00', 'end_time': '18:00', 'name': 'Lunes'},
+                    {'day_week': 1, 'start_time': '09:00', 'end_time': '18:00', 'name': 'Martes'},
+                    {'day_week': 2, 'start_time': '09:00', 'end_time': '18:00', 'name': 'Miércoles'},
+                    {'day_week': 3, 'start_time': '09:00', 'end_time': '18:00', 'name': 'Jueves'},
+                    {'day_week': 4, 'start_time': '09:00', 'end_time': '18:00', 'name': 'Viernes'},
+                    {'day_week': 5, 'start_time': '10:00', 'end_time': '14:00', 'name': 'Sábado'},
+                ]
             },
+            # Horario de clases
             {
-                'name': 'Prof. Ana Martínez',
-                'email': 'ana.martinez@example.com',
-                'role': 'professional',
-                'category': 'education',
-                'address': 'Belgrano 890, Buenos Aires',
-                'description': 'Profesora de inglés con certificación internacional. Clases particulares y grupales.',
-                'hourly_rate': 3000.00,
-                'phone': '+54 11 3456-7890',
-                'is_verified': True,
-                'rating': 4.7,
-                'total_reviews': 28
+                'name': 'Horario de Clases',
+                'schedules': [
+                    {'day_week': 0, 'start_time': '14:00', 'end_time': '21:00', 'name': 'Lunes'},
+                    {'day_week': 1, 'start_time': '14:00', 'end_time': '21:00', 'name': 'Martes'},
+                    {'day_week': 2, 'start_time': '14:00', 'end_time': '21:00', 'name': 'Miércoles'},
+                    {'day_week': 3, 'start_time': '14:00', 'end_time': '21:00', 'name': 'Jueves'},
+                    {'day_week': 4, 'start_time': '14:00', 'end_time': '21:00', 'name': 'Viernes'},
+                    {'day_week': 5, 'start_time': '09:00', 'end_time': '17:00', 'name': 'Sábado'},
+                ]
             },
+            # Horario de belleza
             {
-                'name': 'Dra. Laura Fernández',
-                'email': 'laura.fernandez@example.com',
-                'role': 'professional',
-                'category': 'beauty',
-                'address': 'Palermo 456, Buenos Aires',
-                'description': 'Dermatóloga especializada en tratamientos estéticos y cuidado de la piel.',
-                'hourly_rate': 6000.00,
-                'phone': '+54 11 4567-8901',
-                'is_verified': True,
-                'rating': 4.6,
-                'total_reviews': 38
+                'name': 'Horario de Belleza',
+                'schedules': [
+                    {'day_week': 0, 'start_time': '10:00', 'end_time': '19:00', 'name': 'Lunes'},
+                    {'day_week': 1, 'start_time': '10:00', 'end_time': '19:00', 'name': 'Martes'},
+                    {'day_week': 2, 'start_time': '10:00', 'end_time': '19:00', 'name': 'Miércoles'},
+                    {'day_week': 3, 'start_time': '10:00', 'end_time': '19:00', 'name': 'Jueves'},
+                    {'day_week': 4, 'start_time': '10:00', 'end_time': '19:00', 'name': 'Viernes'},
+                    {'day_week': 5, 'start_time': '10:00', 'end_time': '16:00', 'name': 'Sábado'},
+                ]
             },
+            # Horario flexible
             {
-                'name': 'Lic. Roberto Silva',
-                'email': 'roberto.silva@example.com',
-                'role': 'professional',
-                'category': 'consulting',
-                'address': 'Microcentro 234, Buenos Aires',
-                'description': 'Consultor en marketing digital y estrategias de negocio. Ayudo a empresas a crecer online.',
-                'hourly_rate': 7000.00,
-                'phone': '+54 11 5678-9012',
-                'is_verified': True,
-                'rating': 4.5,
-                'total_reviews': 25
+                'name': 'Horario Flexible',
+                'schedules': [
+                    {'day_week': 0, 'start_time': '06:00', 'end_time': '22:00', 'name': 'Lunes'},
+                    {'day_week': 1, 'start_time': '06:00', 'end_time': '22:00', 'name': 'Martes'},
+                    {'day_week': 2, 'start_time': '06:00', 'end_time': '22:00', 'name': 'Miércoles'},
+                    {'day_week': 3, 'start_time': '06:00', 'end_time': '22:00', 'name': 'Jueves'},
+                    {'day_week': 4, 'start_time': '06:00', 'end_time': '22:00', 'name': 'Viernes'},
+                    {'day_week': 5, 'start_time': '07:00', 'end_time': '18:00', 'name': 'Sábado'},
+                    {'day_week': 6, 'start_time': '08:00', 'end_time': '14:00', 'name': 'Domingo'},
+                ]
             },
+            # Horario de consultoría
             {
-                'name': 'Prof. Diego Morales',
-                'email': 'diego.morales@example.com',
-                'role': 'professional',
-                'category': 'fitness',
-                'address': 'Villa Crespo 789, Buenos Aires',
-                'description': 'Entrenador personal certificado. Programas de fitness y nutrición personalizados.',
-                'hourly_rate': 4000.00,
-                'phone': '+54 11 6789-0123',
-                'is_verified': True,
-                'rating': 4.8,
-                'total_reviews': 42
+                'name': 'Horario de Consultoría',
+                'schedules': [
+                    {'day_week': 0, 'start_time': '09:00', 'end_time': '18:00', 'name': 'Lunes'},
+                    {'day_week': 1, 'start_time': '09:00', 'end_time': '18:00', 'name': 'Martes'},
+                    {'day_week': 2, 'start_time': '09:00', 'end_time': '18:00', 'name': 'Miércoles'},
+                    {'day_week': 3, 'start_time': '09:00', 'end_time': '18:00', 'name': 'Jueves'},
+                    {'day_week': 4, 'start_time': '09:00', 'end_time': '18:00', 'name': 'Viernes'},
+                    {'day_week': 5, 'start_time': '10:00', 'end_time': '14:00', 'name': 'Sábado'},
+                ]
             }
         ]
 
-        for data in professionals_data:
-            # Crear usuario
-            user, created = User.objects.get_or_create(
-                email=data['email'],
-                defaults={
-                    'name': data['name'],
-                    'password': make_password('password123'),
-                    'role': data['role']
-                }
-            )
+        schedules_created = 0
+        schedules_updated = 0
+
+        for professional in professionals:
+            self.stdout.write(f"\n👤 Procesando: {professional.name}")
             
-            if created:
-                # Crear detalle profesional
-                ProfessionalDetail.objects.create(
-                    professional=user,
-                    category=data['category'],
-                    address=data['address'],
-                    description=data['description'],
-                    hourly_rate=data['hourly_rate'],
-                    phone=data['phone'],
-                    is_verified=data['is_verified'],
-                    rating=data['rating'],
-                    total_reviews=data['total_reviews']
+            # Asignar un horario aleatorio a cada profesional
+            selected_template = random.choice(schedule_templates)
+            self.stdout.write(f"  📅 Asignando: {selected_template['name']}")
+            
+            for schedule_info in selected_template['schedules']:
+                from datetime import time
+                
+                # Convertir strings de tiempo a objetos time
+                start_time = time.fromisoformat(schedule_info['start_time'])
+                end_time = time.fromisoformat(schedule_info['end_time'])
+                
+                schedule, created = Schedule.objects.get_or_create(
+                    professional=professional,
+                    day_week=schedule_info['day_week'],
+                    defaults={
+                        'start_time': start_time,
+                        'end_time': end_time
+                    }
                 )
-                self.stdout.write(
-                    self.style.SUCCESS(f'Profesional creado: {data["name"]}')
-                )
-            else:
-                self.stdout.write(
-                    self.style.WARNING(f'Profesional ya existe: {data["name"]}')
-                )
+                
+                if created:
+                    schedules_created += 1
+                    self.stdout.write(
+                        self.style.SUCCESS(f"  ✅ {schedule_info['name']}: {start_time} - {end_time}")
+                    )
+                else:
+                    # Actualizar horario existente
+                    schedule.start_time = start_time
+                    schedule.end_time = end_time
+                    schedule.save()
+                    schedules_updated += 1
+                    self.stdout.write(
+                        self.style.WARNING(f"  🔄 {schedule_info['name']}: {start_time} - {end_time} (actualizado)")
+                    )
 
         self.stdout.write(
-            self.style.SUCCESS('Datos de ejemplo cargados exitosamente')
+            self.style.SUCCESS(f"\n🎉 Resumen:")
+        )
+        self.stdout.write(
+            self.style.SUCCESS(f"  ✅ Horarios creados: {schedules_created}")
+        )
+        self.stdout.write(
+            self.style.SUCCESS(f"  🔄 Horarios actualizados: {schedules_updated}")
+        )
+        self.stdout.write(
+            self.style.SUCCESS(f"\n✅ Horarios cargados exitosamente!")
         ) 
