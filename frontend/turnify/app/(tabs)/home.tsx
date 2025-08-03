@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../../constants/Config';
 import { Colors } from '../../constants/Colors';
 import { useNavigation } from '@react-navigation/native';
+import { router } from 'expo-router';
 
 interface User {
   id: number;
@@ -21,6 +22,8 @@ interface Appointment {
   status: string;
   regular_name?: string;
   professional_name?: string;
+  has_review?: boolean;
+  professional_id?: number;
 }
 
 export default function Home() {
@@ -124,6 +127,56 @@ export default function Home() {
     }
   };
 
+  const handleAppointmentPress = (appointment: Appointment) => {
+    console.log('Appointment pressed:', appointment);
+    console.log('Navigating to appointment-details with params:', {
+      appointment: {
+        id: appointment.id,
+        date: appointment.date,
+        start_time: appointment.start_time,
+        end_time: appointment.end_time,
+        status: appointment.status,
+        regular_name: appointment.regular_name,
+        professional_name: appointment.professional_name,
+        has_review: appointment.has_review,
+        professional_id: appointment.professional_id,
+      }
+    });
+    
+    router.push({
+      pathname: '/appointment-details',
+      params: {
+        appointment: JSON.stringify({
+          id: appointment.id,
+          date: appointment.date,
+          start_time: appointment.start_time,
+          end_time: appointment.end_time,
+          status: appointment.status,
+          regular_name: appointment.regular_name,
+          professional_name: appointment.professional_name,
+          has_review: appointment.has_review,
+          professional_id: appointment.professional_id,
+        })
+      }
+    });
+  };
+
+  const handleReviewPress = (appointment: Appointment) => {
+    console.log('Review pressed for appointment:', appointment);
+    
+    router.push({
+      pathname: '/review-professional',
+      params: {
+        appointment: JSON.stringify({
+          id: appointment.id,
+          professional_name: appointment.professional_name,
+          professional_id: appointment.professional_id,
+          date: appointment.date,
+        })
+      }
+    });
+  };
+
   return (
     <ScrollView 
       style={styles.container}
@@ -168,7 +221,12 @@ export default function Home() {
         ) : (
           <View style={styles.appointmentsList}>
             {appointments.map((appointment) => (
-              <View key={appointment.id} style={styles.appointmentCard}>
+              <TouchableOpacity
+                key={appointment.id}
+                style={styles.appointmentCard}
+                onPress={() => handleAppointmentPress(appointment)}
+                activeOpacity={0.7}
+              >
                 <View style={styles.appointmentHeader}>
                   <View style={styles.dateTimeContainer}>
                     <Text style={styles.dateText}>
@@ -196,7 +254,35 @@ export default function Home() {
                     </Text>
                   </View>
                 </View>
-              </View>
+                
+                <View style={styles.appointmentActions}>
+                  {/* Botón de reseña para turnos completados sin reseña */}
+                  {user?.role !== 'professional' && 
+                   appointment.status === 'completed' && 
+                   !appointment.has_review && (
+                    <TouchableOpacity
+                      style={styles.reviewButton}
+                      onPress={() => handleReviewPress(appointment)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="star" size={14} color={Colors.warning} />
+                      <Text style={styles.reviewButtonText}>Dejar reseña</Text>
+                    </TouchableOpacity>
+                  )}
+                  
+                  {/* Indicador de reseña ya dejada */}
+                  {user?.role !== 'professional' && 
+                   appointment.status === 'completed' && 
+                   appointment.has_review && (
+                    <View style={styles.reviewedBadge}>
+                      <Ionicons name="checkmark-circle" size={14} color={Colors.success} />
+                      <Text style={styles.reviewedText}>Reseñado</Text>
+                    </View>
+                  )}
+                  
+                  <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
+                </View>
+              </TouchableOpacity>
             ))}
           </View>
         )}
@@ -380,6 +466,12 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginLeft: 8,
   },
+  appointmentActions: {
+    position: 'absolute',
+    right: 15,
+    top: '50%',
+    transform: [{ translateY: -8 }],
+  },
   quickActions: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -400,5 +492,35 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     marginTop: 8,
     textAlign: 'center',
+  },
+  reviewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.warning,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 8,
+    gap: 4,
+  },
+  reviewButtonText: {
+    fontSize: 10,
+    color: Colors.textInverse,
+    fontWeight: '600',
+  },
+  reviewedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.success,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 8,
+    gap: 4,
+  },
+  reviewedText: {
+    fontSize: 10,
+    color: Colors.textInverse,
+    fontWeight: '600',
   },
 });

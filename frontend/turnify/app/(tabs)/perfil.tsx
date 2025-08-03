@@ -198,13 +198,62 @@ export default function Perfil() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     Alert.alert(
       'Cerrar sesión',
-      '¿Estás seguro de que quieres cerrar sesión?',
+      '¿Estás seguro de que quieres cerrar sesión? Esta acción te llevará a la pantalla de inicio de sesión.',
       [
         { text: 'Cancelar', style: 'cancel' },
-        { text: 'Cerrar sesión', onPress: signOut, style: 'destructive' },
+        { 
+          text: 'Cerrar sesión', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Mostrar indicador de carga
+              setIsLoading(true);
+              
+              // Limpiar estado local
+              setUser(null);
+              setEditModalVisible(false);
+              setEditName('');
+              setEditLastName('');
+              setEditBio('');
+              setEditProfileImage(null);
+              
+              // Llamar a la función de cerrar sesión del AuthProvider
+              await signOut();
+              
+              // Mostrar mensaje de confirmación
+              Alert.alert(
+                'Sesión cerrada',
+                'Has cerrado sesión exitosamente.',
+                [
+                  {
+                    text: 'OK',
+                    onPress: () => {
+                      // La navegación se manejará automáticamente por el AuthProvider
+                      console.log('Usuario ha cerrado sesión');
+                    }
+                  }
+                ]
+              );
+            } catch (error) {
+              console.error('Error al cerrar sesión:', error);
+              Alert.alert(
+                'Error',
+                'Hubo un problema al cerrar sesión. Por favor, intenta nuevamente.',
+                [
+                  {
+                    text: 'OK',
+                    style: 'default'
+                  }
+                ]
+              );
+            } finally {
+              setIsLoading(false);
+            }
+          }
+        },
       ]
     );
   };
@@ -299,9 +348,19 @@ export default function Perfil() {
       </View>
 
       {/* Logout Button */}
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Ionicons name="log-out-outline" size={20} color={Colors.textInverse} />
-        <Text style={styles.logoutText}>Cerrar sesión</Text>
+      <TouchableOpacity 
+        style={[styles.logoutButton, isLoading && styles.logoutButtonDisabled]} 
+        onPress={handleLogout}
+        disabled={isLoading}
+      >
+        {isLoading ? (
+          <ActivityIndicator size="small" color={Colors.textInverse} />
+        ) : (
+          <>
+            <Ionicons name="log-out-outline" size={20} color={Colors.textInverse} />
+            <Text style={styles.logoutText}>Cerrar sesión</Text>
+          </>
+        )}
       </TouchableOpacity>
 
       {/* Edit Profile Modal */}
@@ -562,6 +621,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 16,
     marginLeft: 8,
+  },
+  logoutButtonDisabled: {
+    opacity: 0.6,
   },
   modalOverlay: {
     flex: 1,

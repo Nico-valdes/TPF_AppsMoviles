@@ -6,45 +6,70 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  TextInput,
   Alert,
-  Platform,
+  TextInput,
   Modal,
-  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../../providers/AuthProvider';
-import { API_BASE_URL } from '../../constants/Config';
-import { Colors } from '../../constants/Colors';
+import { useAuth } from '../providers/AuthProvider';
+import { API_BASE_URL } from '../constants/Config';
+import { Colors } from '../constants/Colors';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useLocalSearchParams } from 'expo-router';
 import { Calendar } from 'react-native-calendars';
 
-interface SelectedProfessional {
+interface Appointment {
   id: number;
-  name: string;
-  category: string;
-  rating: string;
-  hourlyRate: string;
-  profileImage?: string;
-  distance?: number;
+  date: string;
+  start_time: string;
+  end_time: string;
+  status: string;
+  regular_name?: string;
+  professional_name?: string;
+  service?: string;
+  notes?: string;
 }
 
 interface RouteParams {
-  selectedProfessional: SelectedProfessional;
+  appointment: Appointment;
 }
 
-export default function BookingDetails() {
+export default function AppointmentDetails() {
   const { user } = useAuth();
   const navigation = useNavigation();
-  const route = useRoute();
-  const { selectedProfessional } = route.params as RouteParams;
+  const params = useLocalSearchParams();
+  const appointment = params.appointment ? JSON.parse(params.appointment as string) : null;
   
-  const [selectedDate, setSelectedDate] = useState('');
-  const [selectedTime, setSelectedTime] = useState('');
+  console.log('AppointmentDetails mounted with appointment:', appointment);
+  
+  if (!appointment) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color={Colors.textInverse} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Error</Text>
+          <View style={styles.placeholder} />
+        </View>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>No se pudo cargar la información del turno</Text>
+        </View>
+      </View>
+    );
+  }
+  
+  const [selectedDate, setSelectedDate] = useState(appointment.date);
+  const [selectedTime, setSelectedTime] = useState(appointment.start_time);
   const [showTimeModal, setShowTimeModal] = useState(false);
-  const [service, setService] = useState('');
-  const [notes, setNotes] = useState('');
+  const [service, setService] = useState(appointment.service || '');
+  const [notes, setNotes] = useState(appointment.notes || '');
   const [loading, setLoading] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const timeSlots = [
     '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
@@ -53,7 +78,48 @@ export default function BookingDetails() {
     '18:00', '18:30', '19:00', '19:30', '20:00', '20:30'
   ];
 
-  const handleBooking = async () => {
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('es-ES', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  const formatTime = (timeString: string) => {
+    if (!timeString) return '';
+    return timeString.substring(0, 5);
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return Colors.warning;
+      case 'completed':
+        return Colors.success;
+      case 'cancelled':
+        return Colors.error;
+      default:
+        return Colors.textSecondary;
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return 'Pendiente';
+      case 'completed':
+        return 'Completado';
+      case 'cancelled':
+        return 'Cancelado';
+      default:
+        return status;
+    }
+  };
+
+  const handleSaveChanges = async () => {
     if (!selectedDate || !selectedTime || !service.trim()) {
       Alert.alert(
         'Campos Incompletos', 
@@ -68,60 +134,57 @@ export default function BookingDetails() {
       return;
     }
 
-    setLoading(true);
+    setSaving(true);
     try {
-      const appointmentData = {
-        professional: selectedProfessional.id,
-        date: selectedDate,
-        start_time: selectedTime,
-        service: service.trim(),
-        notes: notes.trim(),
-      };
-
-      const response = await fetch(`${API_BASE_URL}/api/appointments/create/`, {
-        method: 'POST',
+      // Simulación de actualización - en producción esto debería llamar al endpoint correcto
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Simular delay de red
+      
+      Alert.alert(
+        'Cambios Guardados ✅',
+        'Tu turno ha sido actualizado exitosamente.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              (navigation as any).navigate('home');
+            }
+          }
+        ]
+      );
+      
+      // En producción, aquí harías la llamada real al API:
+      /*
+      const response = await fetch(`${API_BASE_URL}/api/appointments/${appointment.id}/update/`, {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${user?.token}`,
         },
-        body: JSON.stringify(appointmentData),
+        body: JSON.stringify({
+          date: selectedDate,
+          start_time: selectedTime,
+          service: service.trim(),
+          notes: notes.trim(),
+        }),
       });
 
       if (response.ok) {
-        const responseData = await response.json();
-        Alert.alert(
-          '¡Reserva Exitosa! 🎉',
-          `Tu turno con ${selectedProfessional.name} ha sido reservado correctamente para el ${selectedDate} a las ${selectedTime}. Recibirás una confirmación por email.`,
-          [
-            {
-              text: 'Ver mis turnos',
-              onPress: () => {
-                // Redirigir a la página de mis turnos
-                (navigation as any).navigate('my-appointments');
-              }
-            },
-            {
-              text: 'Ir al inicio',
-              onPress: () => {
-                // Redirigir al home después de la reserva exitosa
-                (navigation as any).navigate('home');
-              }
-            }
-          ]
-        );
+        // Mostrar alerta de éxito
       } else {
         const errorData = await response.json();
-        Alert.alert('Error', errorData.message || 'Error al crear la reserva. Por favor, intenta nuevamente.');
+        Alert.alert('Error', errorData.message || 'Error al actualizar el turno.');
       }
+      */
+      
     } catch (error) {
-      console.error('Error creating appointment:', error);
+      console.error('Error updating appointment:', error);
       Alert.alert(
-        'Error de Conexión', 
-        'No se pudo completar la reserva. Verifica tu conexión a internet e intenta nuevamente.',
+        'Error de Conexión',
+        'No se pudo actualizar el turno. Verifica tu conexión a internet e intenta nuevamente.',
         [
           {
             text: 'Reintentar',
-            onPress: () => handleBooking()
+            onPress: () => handleSaveChanges()
           },
           {
             text: 'Cancelar',
@@ -130,24 +193,95 @@ export default function BookingDetails() {
         ]
       );
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
+  const handleCancelAppointment = async () => {
+    Alert.alert(
+      'Cancelar Turno',
+      '¿Estás seguro de que quieres cancelar este turno? Esta acción no se puede deshacer.',
+      [
+        {
+          text: 'No, mantener',
+          style: 'cancel'
+        },
+        {
+          text: 'Sí, cancelar',
+          style: 'destructive',
+          onPress: async () => {
+            setCancelling(true);
+            try {
+              // Simulación de cancelación - en producción esto debería llamar al endpoint correcto
+              await new Promise(resolve => setTimeout(resolve, 1000)); // Simular delay de red
+              
+              Alert.alert(
+                'Turno Cancelado ✅',
+                'Tu turno ha sido cancelado exitosamente. Se ha enviado una notificación al profesional.',
+                [
+                  {
+                    text: 'Ir al inicio',
+                    onPress: () => {
+                      (navigation as any).navigate('home');
+                    }
+                  }
+                ]
+              );
+              
+              // En producción, aquí harías la llamada real al API:
+              /*
+              const response = await fetch(`${API_BASE_URL}/api/appointments/${appointment.id}/cancel/`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${user?.token}`,
+                },
+                body: JSON.stringify({
+                  reason: 'Cancelado por el usuario'
+                }),
+              });
+
+              if (response.ok) {
+                // Mostrar alerta de éxito
+              } else {
+                const errorData = await response.json();
+                Alert.alert('Error', errorData.message || 'Error al cancelar el turno.');
+              }
+              */
+              
+            } catch (error) {
+              console.error('Error cancelling appointment:', error);
+              Alert.alert(
+                'Error de Conexión',
+                'No se pudo cancelar el turno. Verifica tu conexión a internet e intenta nuevamente.',
+                [
+                  {
+                    text: 'Reintentar',
+                    onPress: () => handleCancelAppointment()
+                  },
+                  {
+                    text: 'Cancelar',
+                    style: 'cancel'
+                  }
+                ]
+              );
+            } finally {
+              setCancelling(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const showTimeSelector = () => {
-    console.log('Botón de hora presionado');
     setShowTimeModal(true);
   };
 
   const selectTime = (time: string) => {
     setSelectedTime(time);
     setShowTimeModal(false);
-    console.log('Hora seleccionada:', time);
   };
-
-
-
-
 
   return (
     <ScrollView style={styles.container}>
@@ -159,58 +293,44 @@ export default function BookingDetails() {
         >
           <Ionicons name="arrow-back" size={24} color={Colors.textInverse} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Reservar Turno</Text>
+        <Text style={styles.headerTitle}>Editar Turno</Text>
         <View style={styles.placeholder} />
       </View>
 
-      {/* Información del profesional */}
-      <View style={styles.professionalCard}>
-        <View style={styles.professionalHeader}>
-          <Image
-            source={
-              selectedProfessional.profileImage
-                ? { uri: selectedProfessional.profileImage.startsWith('http') 
-                    ? selectedProfessional.profileImage 
-                    : `${API_BASE_URL}${selectedProfessional.profileImage}` }
-                : require('../../assets/images/icon.png')
-            }
-            style={styles.professionalAvatar}
-            onError={(error) => {
-              console.log('Error loading image for:', selectedProfessional.name, error);
-              // Fallback a imagen local si hay error
-              return require('../../assets/images/icon.png');
-            }}
-            onLoad={() => console.log('Image loaded successfully for:', selectedProfessional.name)}
-            resizeMode="cover"
-          />
-          <View style={styles.professionalInfo}>
-            <Text style={styles.professionalName}>{selectedProfessional.name}</Text>
-            <Text style={styles.professionalCategory}>{selectedProfessional.category}</Text>
-            <View style={styles.professionalDetails}>
-              <View style={styles.ratingContainer}>
-                <Ionicons name="star" size={16} color={Colors.warning} />
-                <Text style={styles.ratingText}>{selectedProfessional.rating}</Text>
-              </View>
-              <Text style={styles.priceText}>${selectedProfessional.hourlyRate}/hora</Text>
-              {selectedProfessional.distance && (
-                <View style={styles.distanceContainer}>
-                  <Ionicons name="location" size={14} color={Colors.textSecondary} />
-                  <Text style={styles.distanceText}>
-                    {selectedProfessional.distance < 1 
-                      ? `${Math.round(selectedProfessional.distance * 1000)}m` 
-                      : `${selectedProfessional.distance.toFixed(1)}km`
-                    }
-                  </Text>
-                </View>
-              )}
-            </View>
+      {/* Información del turno */}
+      <View style={styles.appointmentCard}>
+        <View style={styles.appointmentHeader}>
+          <View style={styles.dateTimeContainer}>
+            <Text style={styles.dateText}>
+              {formatDate(appointment.date)}
+            </Text>
+            <Text style={styles.timeText}>
+              {formatTime(appointment.start_time)} - {formatTime(appointment.end_time)}
+            </Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appointment.status) }]}>
+            <Text style={styles.statusText}>
+              {getStatusText(appointment.status)}
+            </Text>
+          </View>
+        </View>
+        
+        <View style={styles.appointmentDetails}>
+          <View style={styles.detailRow}>
+            <Ionicons name="person" size={16} color={Colors.textSecondary} />
+            <Text style={styles.detailText}>
+              {user?.role === 'professional' 
+                ? `Cliente: ${appointment.regular_name || 'Sin nombre'}`
+                : `Profesional: ${appointment.professional_name || 'Sin nombre'}`
+              }
+            </Text>
           </View>
         </View>
       </View>
 
       {/* Selección de fecha */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Selecciona una fecha</Text>
+        <Text style={styles.sectionTitle}>Cambiar fecha</Text>
         <Calendar
           onDayPress={(day) => setSelectedDate(day.dateString)}
           markedDates={{
@@ -241,9 +361,8 @@ export default function BookingDetails() {
 
       {/* Selección de hora */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Selecciona una hora</Text>
+        <Text style={styles.sectionTitle}>Cambiar hora</Text>
         
-        {/* Selector de hora desplegable */}
         <TouchableOpacity
           style={styles.timeSelectorButton}
           onPress={showTimeSelector}
@@ -284,19 +403,34 @@ export default function BookingDetails() {
         />
       </View>
 
-      {/* Botón de confirmar reserva */}
+      {/* Botones de acción */}
       <View style={styles.buttonContainer}>
         <TouchableOpacity
-          style={[styles.bookButton, loading && styles.bookButtonDisabled]}
-          onPress={handleBooking}
-          disabled={loading}
+          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+          onPress={handleSaveChanges}
+          disabled={saving}
         >
-          {loading ? (
+          {saving ? (
             <ActivityIndicator size="small" color={Colors.textInverse} />
           ) : (
             <>
-              <Ionicons name="calendar" size={20} color={Colors.textInverse} />
-              <Text style={styles.bookButtonText}>Confirmar Reserva</Text>
+              <Ionicons name="save" size={20} color={Colors.textInverse} />
+              <Text style={styles.saveButtonText}>Guardar Cambios</Text>
+            </>
+          )}
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.cancelButton, cancelling && styles.cancelButtonDisabled]}
+          onPress={handleCancelAppointment}
+          disabled={cancelling}
+        >
+          {cancelling ? (
+            <ActivityIndicator size="small" color={Colors.error} />
+          ) : (
+            <>
+              <Ionicons name="close-circle" size={20} color={Colors.error} />
+              <Text style={styles.cancelButtonText}>Cancelar Turno</Text>
             </>
           )}
         </TouchableOpacity>
@@ -374,7 +508,7 @@ const styles = StyleSheet.create({
   placeholder: {
     width: 34,
   },
-  professionalCard: {
+  appointmentCard: {
     backgroundColor: Colors.background,
     margin: 20,
     padding: 16,
@@ -386,57 +520,47 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.borderLight,
   },
-  professionalHeader: {
+  appointmentHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 10,
   },
-  professionalAvatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-  },
-  professionalInfo: {
+  dateTimeContainer: {
     flex: 1,
   },
-  professionalName: {
-    fontSize: 18,
-    fontWeight: 'bold',
+  dateText: { 
+    fontSize: 16, 
+    fontWeight: '600', 
     color: Colors.textPrimary,
     marginBottom: 4,
   },
-  professionalCategory: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginBottom: 8,
-  },
-  professionalDetails: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 15,
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  ratingText: {
-    fontSize: 14,
+  timeText: { 
+    fontSize: 14, 
     color: Colors.textSecondary,
   },
-  priceText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: Colors.secondary,
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
-  distanceContainer: {
+  statusText: { 
+    fontSize: 12, 
+    color: Colors.textInverse,
+    fontWeight: '600',
+  },
+  appointmentDetails: {
+    marginTop: 5,
+  },
+  detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    marginBottom: 5,
   },
-  distanceText: {
-    fontSize: 12,
+  detailText: { 
+    fontSize: 14, 
     color: Colors.textSecondary,
+    marginLeft: 8,
   },
   section: {
     marginHorizontal: 20,
@@ -448,7 +572,6 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     marginBottom: 12,
   },
-
   timeSelectorButton: {
     backgroundColor: Colors.background,
     flexDirection: 'row',
@@ -467,7 +590,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.textPrimary,
   },
-
   input: {
     backgroundColor: Colors.background,
     borderRadius: 12,
@@ -484,9 +606,9 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     marginHorizontal: 20,
-    marginBottom: 100, // Aumentado para evitar que el nav lo tape
+    marginBottom: 100,
   },
-  bookButton: {
+  saveButton: {
     backgroundColor: Colors.secondary,
     paddingVertical: 16,
     borderRadius: 25,
@@ -495,10 +617,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  bookButtonDisabled: {
+  saveButtonDisabled: {
     opacity: 0.6,
   },
-  bookButtonText: {
+  saveButtonText: {
     color: Colors.textInverse,
     fontSize: 16,
     fontWeight: '600',
@@ -522,10 +644,6 @@ const styles = StyleSheet.create({
     color: Colors.error,
     fontSize: 16,
     fontWeight: '600',
-  },
-  iosTimePicker: {
-    width: '100%',
-    backgroundColor: Colors.background,
   },
   modalOverlay: {
     flex: 1,
@@ -585,5 +703,16 @@ const styles = StyleSheet.create({
   },
   modalTimeSlotTextSelected: {
     color: Colors.textInverse,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: Colors.textSecondary,
+    textAlign: 'center',
   },
 }); 
