@@ -61,7 +61,29 @@ class CurrentUserView(APIView):
             uploaded_file = request.FILES['profileImage']
             # Verificar que el archivo no esté vacío
             if uploaded_file.size > 0:
-                data['profileImage'] = uploaded_file
+                # Guardar la imagen en media/profile_images/
+                import os
+                from django.conf import settings
+                
+                # Crear el directorio si no existe
+                media_dir = os.path.join(settings.MEDIA_ROOT, 'profile_images')
+                os.makedirs(media_dir, exist_ok=True)
+                
+                # Generar nombre único para el archivo
+                import uuid
+                file_extension = os.path.splitext(uploaded_file.name)[1]
+                filename = f"{uuid.uuid4()}{file_extension}"
+                file_path = os.path.join(media_dir, filename)
+                
+                # Guardar el archivo
+                with open(file_path, 'wb+') as destination:
+                    for chunk in uploaded_file.chunks():
+                        destination.write(chunk)
+                
+                # Guardar la ruta relativa en la base de datos
+                relative_path = f"profile_images/{filename}"
+                data['profileImage'] = relative_path
+                print(f"Imagen guardada en: {relative_path}")
             else:
                 # Si el archivo está vacío, no incluirlo en los datos
                 print("Archivo de imagen vacío recibido")

@@ -58,10 +58,11 @@ export default function Perfil() {
       });
       const data = await res.json();
       
-      // Construir la URL completa de la imagen si existe
+      // Construir la URL completa de la imagen si existe y no es una URL externa
       if (data.profileImage && !data.profileImage.startsWith('http')) {
-        data.profileImage = `${API_BASE_URL}${data.profileImage}`;
+        data.profileImage = `${API_BASE_URL}/media/${data.profileImage}`;
       }
+      console.log('Profile image URL:', data.profileImage);
       
       setUser(data);
       setEditName(data.name || '');
@@ -172,10 +173,11 @@ export default function Perfil() {
       if (response.ok) {
         const updatedUser = await response.json();
         
-        // Construir la URL completa de la imagen si existe
+        // Construir la URL completa de la imagen si existe y no es una URL externa
         if (updatedUser.profileImage && !updatedUser.profileImage.startsWith('http')) {
-          updatedUser.profileImage = `${API_BASE_URL}${updatedUser.profileImage}`;
+          updatedUser.profileImage = `${API_BASE_URL}/media/${updatedUser.profileImage}`;
         }
+        console.log('Updated profile image URL:', updatedUser.profileImage);
         
         setUser(updatedUser);
         setIsEditing(false);
