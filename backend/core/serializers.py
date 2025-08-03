@@ -4,26 +4,12 @@ from .models import User, ProfessionalDetail, Schedule, Appointment, Chat, Messa
 
 
 class UserSerializer(serializers.ModelSerializer):
-    profileImage = serializers.ImageField(required=False, allow_null=True, max_length=None)
+    profileImage = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     
     class Meta:
         model = User
         fields = ['id', 'name', 'email', 'role', 'lastName', 'bio', 'profileImage', 'created_at', 'is_active']
         read_only_fields = ['id', 'created_at', 'is_active']
-    
-    def validate_profileImage(self, value):
-        if value and hasattr(value, 'size') and value.size == 0:
-            raise serializers.ValidationError("El archivo de imagen está vacío")
-        return value
-    
-    def update(self, instance, validated_data):
-        # Manejar la imagen de perfil
-        if 'profileImage' in validated_data:
-            # Si hay una nueva imagen, eliminar la anterior si existe
-            if instance.profileImage:
-                instance.profileImage.delete(save=False)
-        
-        return super().update(instance, validated_data)
 
 
 class ProfessionalDetailSerializer(serializers.ModelSerializer):
@@ -41,7 +27,7 @@ class ProfessionalListSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = ProfessionalDetail
-        fields = ['id', 'professional', 'category', 'category_display', 'address', 'description', 'hourly_rate', 'is_verified', 'rating', 'total_reviews']
+        fields = ['id', 'professional', 'category', 'category_display', 'address', 'description', 'hourly_rate', 'is_verified', 'rating', 'total_reviews', 'latitude', 'longitude']
 
 
 class ScheduleSerializer(serializers.ModelSerializer):

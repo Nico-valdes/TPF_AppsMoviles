@@ -18,6 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { API_BASE_URL } from '../../constants/Config';
 import { Colors } from '../../constants/Colors';
+import { useNavigation } from '@react-navigation/native';
 
 interface User {
   id: number;
@@ -31,6 +32,7 @@ interface User {
 
 export default function Perfil() {
   const { signOut, user: authUser } = useAuth();
+  const navigation = useNavigation();
   const [user, setUser] = useState<User | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -250,24 +252,22 @@ export default function Perfil() {
         </Text>
       </View>
 
-      {/* Stats Section */}
-      <View style={styles.statsContainer}>
-        <View style={styles.statCard}>
-          <Ionicons name="calendar" size={24} color={Colors.secondary} />
-          <Text style={styles.statNumber}>12</Text>
-          <Text style={styles.statLabel}>Turnos</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Ionicons name="star" size={24} color={Colors.warning} />
-          <Text style={styles.statNumber}>4.8</Text>
-          <Text style={styles.statLabel}>Rating</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Ionicons name="people" size={24} color={Colors.success} />
-          <Text style={styles.statNumber}>8</Text>
-          <Text style={styles.statLabel}>Clientes</Text>
-        </View>
-      </View>
+             {/* Quick Actions Section */}
+       <View style={styles.quickActionsContainer}>
+         <TouchableOpacity 
+           style={styles.quickActionCard}
+           onPress={() => (navigation as any).navigate('my-appointments')}
+         >
+           <View style={styles.quickActionIcon}>
+             <Ionicons name="calendar-outline" size={28} color={Colors.secondary} />
+           </View>
+           <View style={styles.quickActionContent}>
+             <Text style={styles.quickActionTitle}>Mis Turnos</Text>
+             <Text style={styles.quickActionSubtitle}>Ver mis reservas</Text>
+           </View>
+           <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
+         </TouchableOpacity>
+       </View>
 
       {/* Action Buttons */}
       <View style={styles.actionsContainer}>
@@ -665,9 +665,47 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.secondary,
     alignItems: 'center',
   },
-  saveButtonText: {
-    color: Colors.textInverse,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});
+     saveButtonText: {
+     color: Colors.textInverse,
+     fontSize: 16,
+     fontWeight: '600',
+   },
+   quickActionsContainer: {
+     margin: 20,
+   },
+   quickActionCard: {
+     backgroundColor: Colors.background,
+     padding: 20,
+     borderRadius: 15,
+     flexDirection: 'row',
+     alignItems: 'center',
+     shadowColor: Colors.shadow,
+     shadowOpacity: 0.1,
+     shadowRadius: 10,
+     elevation: 5,
+     borderWidth: 1,
+     borderColor: Colors.borderLight,
+   },
+   quickActionIcon: {
+     width: 50,
+     height: 50,
+     borderRadius: 25,
+     backgroundColor: Colors.backgroundSecondary,
+     alignItems: 'center',
+     justifyContent: 'center',
+     marginRight: 15,
+   },
+   quickActionContent: {
+     flex: 1,
+   },
+   quickActionTitle: {
+     fontSize: 18,
+     fontWeight: '600',
+     color: Colors.textPrimary,
+     marginBottom: 4,
+   },
+   quickActionSubtitle: {
+     fontSize: 14,
+     color: Colors.textSecondary,
+   },
+ });

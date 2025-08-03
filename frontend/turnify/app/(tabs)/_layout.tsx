@@ -4,9 +4,8 @@ import { useAuth } from '../../providers/AuthProvider';
 import { useEffect } from 'react';
 import { router } from 'expo-router';
 import Home from './home';
-import Professionals from './professionals';
-import Perfil from './perfil';
-import Booking from './booking';
+import PerfilStack from './perfil-stack';
+import CategoriesStack from './categories-stack';
 
 const Tab = createBottomTabNavigator();
 
@@ -38,11 +37,9 @@ export default function AppLayout() {
 
         if (route.name === 'home') {
           iconName = 'home';
-        } else if (route.name === 'professionals') {
-          iconName = 'people';
         } else if (route.name === 'booking') {
           iconName = 'calendar';
-        } else if (route.name === 'perfil') {
+        } else if (route.name === 'profile') {
           iconName = 'person';
         }
 
@@ -70,10 +67,20 @@ export default function AppLayout() {
       },
     })}
     >
-      <Tab.Screen name="home" component={Home} options={{ headerShown: false }} />
-      <Tab.Screen name="professionals" component={Professionals} options={{ headerShown: false }} />
-      <Tab.Screen name="booking" component={Booking} options={{ headerShown: false }} />
-      <Tab.Screen name="perfil" component={Perfil} options={{ headerShown: false }} />
+            <Tab.Screen name="home" component={Home} options={{ headerShown: false }} />
+      <Tab.Screen 
+        name="booking" 
+        component={CategoriesStack} 
+        options={{ 
+          headerShown: false,
+          tabBarLabel: 'Reservar',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="calendar" size={size} color={color} />
+          ),
+        }} 
+      />
+      <Tab.Screen name="profile" component={PerfilStack} options={{ headerShown: false }} />
+
     </Tab.Navigator>
   );
 }

@@ -5,395 +5,373 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   RefreshControl,
   TextInput,
+  Image,
+  FlatList,
+  Dimensions,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Calendar } from 'react-native-calendars';
 import { useAuth } from '../../providers/AuthProvider';
 import { API_BASE_URL } from '../../constants/Config';
 import { Colors } from '../../constants/Colors';
-import { useRoute } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
+import { useLocation } from '../../hooks/useLocation';
 
-interface TimeSlot {
-  id: string;
-  time: string;
-  available: boolean;
-}
+const { width } = Dimensions.get('window');
 
 interface Professional {
   id: number;
-  name: string;
-  category: string;
-  rating: number;
-  hourlyRate: number;
-  profileImage?: string;
-}
-
-interface BookingData {
-  professionalId: number;
-  date: string;
-  timeSlot: string;
-  service: string;
-  notes?: string;
-}
-
-export default function BookingScreen() {
-  const { user, authenticatedRequest } = useAuth();
-  const route = useRoute();
-  const [selectedDate, setSelectedDate] = useState<string>('');
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('');
-  const [selectedProfessional, setSelectedProfessional] = useState<Professional | null>(null);
-  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
-  const [professionals, setProfessionals] = useState<Professional[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [service, setService] = useState('');
-  const [notes, setNotes] = useState('');
-
-  // Generar horarios disponibles (9:00 AM - 6:00 PM)
-  const generateTimeSlots = () => {
-    const slots: TimeSlot[] = [];
-    for (let hour = 9; hour <= 18; hour++) {
-      const time = `${hour.toString().padStart(2, '0')}:00`;
-      slots.push({
-        id: time,
-        time,
-        available: Math.random() > 0.3, // 70% de probabilidad de estar disponible
-      });
-    }
-    return slots;
+  professional: {
+    id: number;
+    name: string;
+    email: string;
+    profileImage?: string;
   };
+  category: string;
+  category_display: string;
+  address: string;
+  description: string;
+  hourly_rate: number;
+  is_verified: boolean;
+  rating: number;
+  total_reviews: number;
+  latitude?: number;
+  longitude?: number;
+  distance?: number;
+}
 
-  useEffect(() => {
-    // Verificar si hay un profesional seleccionado desde la navegación
-    const params = route.params as any;
-    if (params?.selectedProfessional) {
-      setSelectedProfessional(params.selectedProfessional);
-    }
-    
-    fetchProfessionals();
-    setTimeSlots(generateTimeSlots());
-  }, [route.params]);
+const CATEGORIES = [
+  { id: 'all', name: 'Todos', icon: 'grid', color: Colors.primary },
+  { id: 'health', name: 'Salud', icon: 'medical', color: '#FF6B6B' },
+  { id: 'beauty', name: 'Belleza', icon: 'cut', color: '#FFD93D' },
+  { id: 'fitness', name: 'Fitness', icon: 'fitness', color: '#6BCF7F' },
+  { id: 'education', name: 'Educación', icon: 'school', color: '#4ECDC4' },
+  { id: 'legal', name: 'Legal', icon: 'document-text', color: '#A8E6CF' },
+  { id: 'consulting', name: 'Consultoría', icon: 'business', color: '#FF8B94' },
+  { id: 'other', name: 'Otros', icon: 'ellipsis-horizontal', color: '#DDA0DD' },
+];
+
+export default function Booking() {
+  const { user } = useAuth();
+  const navigation = useNavigation();
+  const { location, loading: locationLoading, error: locationError, calculateDistance } = useLocation();
+  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [filteredProfessionals, setFilteredProfessionals] = useState<Professional[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
 
   const fetchProfessionals = async () => {
     try {
+      setLoading(true);
       const response = await fetch(`${API_BASE_URL}/api/professionals/`);
+      
       if (response.ok) {
         const data = await response.json();
-        setProfessionals(data);
+        console.log('Professionals data received:', data.length, 'professionals');
+        console.log('First professional profileImage:', data[0]?.professional?.profileImage);
+        
+        // Calcular distancias si tenemos ubicación del usuario
+        if (location) {
+          const professionalsWithDistance = data.map((professional: Professional) => {
+            if (professional.latitude && professional.longitude) {
+              const distance = calculateDistance(
+                location.latitude,
+                location.longitude,
+                professional.latitude,
+                professional.longitude
+              );
+              return { ...professional, distance };
+            }
+            return professional;
+          });
+          
+          // Ordenar por distancia (más cercanos primero)
+          professionalsWithDistance.sort((a: Professional, b: Professional) => {
+            if (a.distance && b.distance) {
+              return a.distance - b.distance;
+            }
+            return 0;
+          });
+          
+          setProfessionals(professionalsWithDistance);
+          setFilteredProfessionals(professionalsWithDistance);
+        } else {
+          setProfessionals(data);
+          setFilteredProfessionals(data);
+        }
+      } else {
+        console.error('Error fetching professionals:', response.status);
       }
     } catch (error) {
       console.error('Error fetching professionals:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchProfessionals();
-    setTimeSlots(generateTimeSlots());
     setRefreshing(false);
   };
 
-  const handleDateSelect = (date: string) => {
-    setSelectedDate(date);
-    setSelectedTimeSlot('');
-    // Regenerar horarios para la fecha seleccionada
-    setTimeSlots(generateTimeSlots());
-  };
+  const filterProfessionals = () => {
+    let filtered = professionals;
 
-  const handleTimeSlotSelect = (timeSlot: string) => {
-    setSelectedTimeSlot(timeSlot);
-  };
-
-  const handleProfessionalSelect = (professional: Professional) => {
-    setSelectedProfessional(professional);
-  };
-
-  const handleBooking = async () => {
-    if (!selectedProfessional || !selectedDate || !selectedTimeSlot || !service) {
-      Alert.alert('Error', 'Por favor completa todos los campos requeridos');
-      return;
+    // Filtrar por categoría
+    if (selectedCategory !== 'all') {
+      filtered = filtered.filter(p => p.category === selectedCategory);
     }
 
-    setLoading(true);
-    try {
-      const bookingData: BookingData = {
-        professionalId: selectedProfessional.id,
-        date: selectedDate,
-        timeSlot: selectedTimeSlot,
-        service,
-        notes,
-      };
+    // Filtrar por búsqueda
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(p => 
+        p.professional.name.toLowerCase().includes(query) ||
+        p.category_display.toLowerCase().includes(query) ||
+        p.description.toLowerCase().includes(query)
+      );
+    }
 
-      console.log('Enviando datos de reserva:', bookingData);
+    setFilteredProfessionals(filtered);
+  };
 
-      // Usar la función helper de autenticación
-      
-      const response = await authenticatedRequest(`${API_BASE_URL}/api/appointments/create/`, {
-        method: 'POST',
-        body: JSON.stringify(bookingData),
-      });
-
-      console.log('Respuesta del servidor:', response.status);
-
-      if (response.ok) {
-        const responseData = await response.json();
-        console.log('Datos de respuesta:', responseData);
-        
-        Alert.alert(
-          '¡Reserva Exitosa!',
-          'Tu turno ha sido reservado correctamente',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                // Limpiar formulario
-                setSelectedDate('');
-                setSelectedTimeSlot('');
-                setSelectedProfessional(null);
-                setService('');
-                setNotes('');
-              },
-            },
-          ]
-        );
-      } else {
-        const errorData = await response.json();
-        console.error('Error del servidor:', errorData);
-        Alert.alert('Error', errorData.message || errorData.error || 'Error al crear la reserva');
+  const handleProfessionalPress = (professional: Professional) => {
+    (navigation as any).navigate('booking-details', { 
+      selectedProfessional: {
+        id: professional.professional.id,
+        name: professional.professional.name,
+        category: professional.category_display,
+        rating: professional.rating,
+        hourlyRate: professional.hourly_rate,
+        profileImage: professional.professional.profileImage,
+        distance: professional.distance,
       }
-    } catch (error) {
-      console.error('Error creating booking:', error);
-      Alert.alert('Error', 'Error de conexión o autenticación');
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
-  const renderCalendar = () => {
-    const today = new Date().toISOString().split('T')[0];
-    
-    // Generar fechas marcadas para los próximos 30 días
-    const markedDates: any = {};
-    for (let i = 0; i < 30; i++) {
-      const date = new Date();
-      date.setDate(date.getDate() + i);
-      const dateString = date.toISOString().split('T')[0];
-      markedDates[dateString] = {
-        marked: true,
-        dotColor: Colors.secondary,
-        selected: selectedDate === dateString,
-        selectedColor: Colors.secondary,
-      };
-    }
+  const renderStars = (rating: number) => {
+    const stars = [];
+    const fullStars = Math.floor(rating);
+    const hasHalfStar = rating % 1 !== 0;
 
-    return (
-      <View style={styles.calendarContainer}>
-        <Text style={styles.sectionTitle}>Selecciona una fecha</Text>
-        <Calendar
-          onDayPress={(day) => handleDateSelect(day.dateString)}
-          markedDates={markedDates}
-          theme={{
-            backgroundColor: Colors.background,
-            calendarBackground: Colors.background,
-            textSectionTitleColor: Colors.textPrimary,
-            selectedDayBackgroundColor: Colors.secondary,
-            selectedDayTextColor: Colors.textInverse,
-            todayTextColor: Colors.secondary,
-            dayTextColor: Colors.textPrimary,
-            textDisabledColor: Colors.textTertiary,
-            dotColor: Colors.secondary,
-            selectedDotColor: Colors.textInverse,
-            arrowColor: Colors.secondary,
-            monthTextColor: Colors.textPrimary,
-            indicatorColor: Colors.secondary,
-            textDayFontWeight: '500',
-            textMonthFontWeight: 'bold',
-            textDayHeaderFontWeight: '600',
-            textDayFontSize: 16,
-            textMonthFontSize: 18,
-            textDayHeaderFontSize: 14,
+    for (let i = 0; i < 5; i++) {
+      if (i < fullStars) {
+        stars.push(<Ionicons key={i} name="star" size={12} color={Colors.warning} />);
+      } else if (i === fullStars && hasHalfStar) {
+        stars.push(<Ionicons key={i} name="star-half" size={12} color={Colors.warning} />);
+      } else {
+        stars.push(<Ionicons key={i} name="star-outline" size={12} color={Colors.border} />);
+      }
+    }
+    return stars;
+  };
+
+  const renderCategoryItem = ({ item }: { item: typeof CATEGORIES[0] }) => (
+    <TouchableOpacity
+      style={[
+        styles.categoryItem,
+        selectedCategory === item.id && styles.categoryItemSelected
+      ]}
+      onPress={() => setSelectedCategory(item.id)}
+    >
+      <Ionicons 
+        name={item.icon as any} 
+        size={20} 
+        color={selectedCategory === item.id ? Colors.textInverse : item.color} 
+      />
+      <Text style={[
+        styles.categoryText,
+        selectedCategory === item.id && styles.categoryTextSelected
+      ]}>
+        {item.name}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  const renderProfessionalItem = ({ item }: { item: Professional }) => (
+    <TouchableOpacity
+      style={styles.professionalCard}
+      onPress={() => handleProfessionalPress(item)}
+    >
+      <View style={styles.professionalHeader}>
+        <Image
+          source={
+            item.professional.profileImage
+              ? { uri: item.professional.profileImage.startsWith('http') 
+                  ? item.professional.profileImage 
+                  : `${API_BASE_URL}${item.professional.profileImage}` }
+              : require('../../assets/images/icon.png')
+          }
+          style={styles.professionalAvatar}
+          onError={(error) => {
+            console.log('Error loading image for:', item.professional.name, error);
+            // Fallback a imagen local si hay error
+            return require('../../assets/images/icon.png');
           }}
-          minDate={today}
-          maxDate={new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
+          onLoad={() => console.log('Image loaded successfully for:', item.professional.name)}
+          resizeMode="cover"
         />
-      </View>
-    );
-  };
-
-  const renderTimeSlots = () => {
-    if (!selectedDate) return null;
-
-    return (
-      <View style={styles.timeSlotsContainer}>
-        <Text style={styles.sectionTitle}>Selecciona un horario</Text>
-        <View style={styles.timeSlotsGrid}>
-          {timeSlots.map((slot) => (
-            <TouchableOpacity
-              key={slot.id}
-              style={[
-                styles.timeSlotCard,
-                !slot.available && styles.timeSlotUnavailable,
-                selectedTimeSlot === slot.time && styles.timeSlotSelected,
-              ]}
-              onPress={() => slot.available && handleTimeSlotSelect(slot.time)}
-              disabled={!slot.available}
-            >
-              <Text
-                style={[
-                  styles.timeSlotText,
-                  !slot.available && styles.timeSlotTextUnavailable,
-                  selectedTimeSlot === slot.time && styles.timeSlotTextSelected,
-                ]}
-              >
-                {slot.time}
-              </Text>
-              {!slot.available && (
-                <Ionicons name="close-circle" size={16} color={Colors.error} />
-              )}
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-    );
-  };
-
-  const renderProfessionalSelection = () => {
-    return (
-      <View style={styles.professionalContainer}>
-        <Text style={styles.sectionTitle}>Selecciona un profesional</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.professionalsContainer}>
-            {professionals.map((professional) => (
-              <TouchableOpacity
-                key={professional.id}
-                style={[
-                  styles.professionalCard,
-                  selectedProfessional?.id === professional.id && styles.professionalCardSelected,
-                ]}
-                onPress={() => handleProfessionalSelect(professional)}
-              >
-                <View style={styles.professionalInfo}>
-                  <Text style={styles.professionalName}>{professional.name}</Text>
-                  <Text style={styles.professionalCategory}>{professional.category}</Text>
-                  <View style={styles.ratingContainer}>
-                    <Ionicons name="star" size={14} color={Colors.warning} />
-                    <Text style={styles.ratingText}>{professional.rating}</Text>
-                  </View>
-                  <Text style={styles.hourlyRateText}>
-                    ${professional.hourlyRate}/hora
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+        <View style={styles.professionalInfo}>
+          <View style={styles.professionalNameRow}>
+            <Text style={styles.professionalName} numberOfLines={1}>
+              {item.professional.name}
+            </Text>
+            {item.is_verified && (
+              <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
+            )}
           </View>
-        </ScrollView>
-      </View>
-    );
-  };
-
-  const renderBookingForm = () => {
-    if (!selectedProfessional || !selectedDate || !selectedTimeSlot) return null;
-
-    return (
-      <View style={styles.bookingFormContainer}>
-        <Text style={styles.sectionTitle}>Detalles de la reserva</Text>
-        
-        <View style={styles.formField}>
-          <Text style={styles.formLabel}>Servicio</Text>
-          <View style={styles.serviceInput}>
-            <TextInput
-              style={styles.input}
-              placeholder="Ej: Corte de pelo, Consulta médica..."
-              value={service}
-              onChangeText={setService}
-              placeholderTextColor={Colors.textTertiary}
-            />
-          </View>
-        </View>
-
-        <View style={styles.formField}>
-          <Text style={styles.formLabel}>Notas adicionales (opcional)</Text>
-          <View style={styles.notesInput}>
-            <TextInput
-              style={[styles.input, styles.notesTextInput]}
-              placeholder="Agregar notas especiales..."
-              value={notes}
-              onChangeText={setNotes}
-              multiline
-              numberOfLines={3}
-              placeholderTextColor={Colors.textTertiary}
-            />
-          </View>
-        </View>
-
-        <View style={styles.bookingSummary}>
-          <Text style={styles.summaryTitle}>Resumen de la reserva</Text>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Profesional:</Text>
-            <Text style={styles.summaryValue}>{selectedProfessional.name}</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Fecha:</Text>
-            <Text style={styles.summaryValue}>
-              {new Date(selectedDate).toLocaleDateString('es-ES', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
+          <Text style={styles.professionalCategory}>
+            {item.category_display}
+          </Text>
+          <View style={styles.ratingContainer}>
+            {renderStars(item.rating)}
+            <Text style={styles.ratingText}>
+              {item.rating} ({item.total_reviews})
             </Text>
           </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Horario:</Text>
-            <Text style={styles.summaryValue}>{selectedTimeSlot}</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Servicio:</Text>
-            <Text style={styles.summaryValue}>{service}</Text>
+        </View>
+        <View style={styles.professionalActions}>
+          {item.distance && (
+            <View style={styles.distanceContainer}>
+              <Ionicons name="location" size={14} color={Colors.textSecondary} />
+              <Text style={styles.distanceText}>
+                {item.distance < 1 
+                  ? `${Math.round(item.distance * 1000)}m` 
+                  : `${item.distance.toFixed(1)}km`
+                }
+              </Text>
+            </View>
+          )}
+          <View style={styles.priceContainer}>
+            <Text style={styles.priceText}>${item.hourly_rate}</Text>
+            <Text style={styles.priceLabel}>/hora</Text>
           </View>
         </View>
+      </View>
+      
+      <Text style={styles.professionalDescription} numberOfLines={2}>
+        {item.description}
+      </Text>
+      
+      <TouchableOpacity 
+        style={styles.bookButton}
+        onPress={() => handleProfessionalPress(item)}
+      >
+        <Ionicons name="calendar" size={16} color={Colors.textInverse} />
+        <Text style={styles.bookButtonText}>Reservar</Text>
+      </TouchableOpacity>
+    </TouchableOpacity>
+  );
 
-        <TouchableOpacity
-          style={[styles.bookButton, loading && styles.bookButtonDisabled]}
-          onPress={handleBooking}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color={Colors.textInverse} size="small" />
-          ) : (
-            <>
-              <Ionicons name="calendar" size={20} color={Colors.textInverse} />
-              <Text style={styles.bookButtonText}>Confirmar Reserva</Text>
-            </>
-          )}
-        </TouchableOpacity>
+  useEffect(() => {
+    fetchProfessionals();
+  }, [location]);
+
+  useEffect(() => {
+    filterProfessionals();
+  }, [professionals, searchQuery, selectedCategory]);
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.secondary} />
+        <Text style={styles.loadingText}>Cargando profesionales...</Text>
       </View>
     );
-  };
+  }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.contentContainer}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
+    <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <Ionicons name="calendar-outline" size={24} color={Colors.secondary} />
-        <Text style={styles.title}>Reservar Turno</Text>
-        <Text style={styles.subtitle}>Selecciona fecha, horario y profesional</Text>
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>Reservar Turno</Text>
+          <Text style={styles.headerSubtitle}>
+            Encuentra los mejores profesionales cerca de ti
+          </Text>
+          
+          {/* Estado de ubicación */}
+          {locationLoading && (
+            <View style={styles.locationStatus}>
+              <ActivityIndicator size="small" color={Colors.textInverse} />
+              <Text style={styles.locationStatusText}>Obteniendo ubicación...</Text>
+            </View>
+          )}
+          
+          {locationError && (
+            <View style={styles.locationStatus}>
+              <Ionicons name="close-circle" size={16} color={Colors.error} />
+              <Text style={styles.locationStatusText}>{locationError}</Text>
+            </View>
+          )}
+          
+          {location && (
+            <View style={styles.locationStatus}>
+              <Ionicons name="location" size={16} color={Colors.success} />
+              <Text style={styles.locationStatusText}>Ubicación activa</Text>
+            </View>
+          )}
+        </View>
       </View>
 
-      {renderProfessionalSelection()}
-      {renderCalendar()}
-      {renderTimeSlots()}
-      {renderBookingForm()}
-    </ScrollView>
+      {/* Barra de búsqueda */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInput}>
+          <Ionicons name="search" size={20} color={Colors.textTertiary} />
+          <TextInput
+            style={styles.searchTextInput}
+            placeholder="Buscar profesionales..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor={Colors.textTertiary}
+          />
+        </View>
+      </View>
+
+      {/* Categorías deslizables */}
+      <View style={styles.categoriesContainer}>
+        <FlatList
+          data={CATEGORIES}
+          renderItem={renderCategoryItem}
+          keyExtractor={(item) => item.id}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoriesList}
+        />
+      </View>
+
+      {/* Lista de profesionales */}
+      <View style={styles.professionalsContainer}>
+        <View style={styles.professionalsHeader}>
+          <Text style={styles.professionalsTitle}>
+            {filteredProfessionals.length > 0 
+              ? `${filteredProfessionals.length} profesional${filteredProfessionals.length !== 1 ? 'es' : ''} encontrado${filteredProfessionals.length !== 1 ? 's' : ''}`
+              : 'No se encontraron profesionales'
+            }
+          </Text>
+          <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
+            <Ionicons name="refresh" size={20} color={Colors.secondary} />
+          </TouchableOpacity>
+        </View>
+
+        <FlatList
+          data={filteredProfessionals}
+          renderItem={renderProfessionalItem}
+          keyExtractor={(item) => item.id.toString()}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          contentContainerStyle={styles.professionalsList}
+        />
+      </View>
+    </View>
   );
 }
 
@@ -402,196 +380,226 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  contentContainer: {
-    paddingBottom: 100,
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: Colors.textSecondary,
   },
   header: {
-    padding: 20,
-    alignItems: 'center',
     backgroundColor: Colors.primary,
+    paddingHorizontal: 20,
+    paddingTop: 50,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 25,
+    borderBottomRightRadius: 25,
   },
-  title: {
-    fontSize: 24,
+  headerContent: {
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 28,
     fontWeight: 'bold',
     color: Colors.textInverse,
-    marginTop: 8,
+    marginBottom: 8,
   },
-  subtitle: {
+  headerSubtitle: {
     fontSize: 16,
     color: Colors.textInverse,
     opacity: 0.8,
-    marginTop: 4,
+    textAlign: 'center',
+    marginBottom: 15,
   },
-  professionalContainer: {
-    padding: 20,
+  locationStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
-  sectionTitle: {
+  locationStatusText: {
+    fontSize: 12,
+    color: Colors.textInverse,
+    opacity: 0.8,
+  },
+  searchContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+  },
+  searchInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+    borderRadius: 15,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: Colors.shadow,
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  searchTextInput: {
+    flex: 1,
+    fontSize: 16,
+    paddingLeft: 10,
+    color: Colors.textPrimary,
+  },
+  categoriesContainer: {
+    paddingVertical: 10,
+  },
+  categoriesList: {
+    paddingHorizontal: 20,
+  },
+  categoryItem: {
+    backgroundColor: Colors.background,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 25,
+    marginRight: 12,
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: Colors.shadow,
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  categoryItemSelected: {
+    backgroundColor: Colors.secondary,
+    borderColor: Colors.secondary,
+  },
+  categoryText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    fontWeight: '500',
+  },
+  categoryTextSelected: {
+    color: Colors.textInverse,
+  },
+  professionalsContainer: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  professionalsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  professionalsTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: Colors.textPrimary,
-    marginBottom: 16,
   },
-  professionalsContainer: {
-    flexDirection: 'row',
-    gap: 12,
+  refreshButton: {
+    padding: 5,
+  },
+  professionalsList: {
+    paddingBottom: 120, // Aumentado para evitar que el nav tape los botones
   },
   professionalCard: {
-    backgroundColor: Colors.backgroundSecondary,
-    borderRadius: 12,
+    backgroundColor: Colors.background,
+    borderRadius: 15,
     padding: 16,
-    minWidth: 160,
-    borderWidth: 2,
-    borderColor: Colors.border,
+    marginBottom: 12,
+    shadowColor: Colors.shadow,
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
   },
-  professionalCardSelected: {
-    borderColor: Colors.secondary,
-    backgroundColor: Colors.secondaryMuted,
+  professionalHeader: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  professionalAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    marginRight: 12,
   },
   professionalInfo: {
+    flex: 1,
+  },
+  professionalNameRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
   },
   professionalName: {
     fontSize: 16,
     fontWeight: '600',
     color: Colors.textPrimary,
-    textAlign: 'center',
+    flex: 1,
   },
   professionalCategory: {
     fontSize: 14,
     color: Colors.textSecondary,
-    marginTop: 4,
+    marginBottom: 6,
   },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
+    gap: 4,
   },
   ratingText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
+    fontSize: 12,
+    color: Colors.textTertiary,
     marginLeft: 4,
   },
-  hourlyRateText: {
-    fontSize: 14,
-    color: Colors.secondary,
-    fontWeight: '600',
-    marginTop: 4,
+  professionalActions: {
+    alignItems: 'flex-end',
+    gap: 8,
   },
-  calendarContainer: {
-    padding: 20,
-  },
-  timeSlotsContainer: {
-    padding: 20,
-  },
-  timeSlotsGrid: {
+  distanceContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  timeSlotCard: {
-    backgroundColor: Colors.backgroundSecondary,
-    borderRadius: 8,
-    padding: 12,
-    minWidth: 80,
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: Colors.border,
+    gap: 4,
   },
-  timeSlotSelected: {
-    borderColor: Colors.secondary,
-    backgroundColor: Colors.secondaryMuted,
-  },
-  timeSlotUnavailable: {
-    backgroundColor: Colors.backgroundTertiary,
-    borderColor: Colors.borderLight,
-  },
-  timeSlotText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.textPrimary,
-  },
-  timeSlotTextSelected: {
-    color: Colors.secondary,
-  },
-  timeSlotTextUnavailable: {
-    color: Colors.textTertiary,
-  },
-  bookingFormContainer: {
-    padding: 20,
-  },
-  formField: {
-    marginBottom: 20,
-  },
-  formLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.textPrimary,
-    marginBottom: 8,
-  },
-  serviceInput: {
-    backgroundColor: Colors.backgroundSecondary,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  notesInput: {
-    backgroundColor: Colors.backgroundSecondary,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  input: {
-    padding: 12,
-    fontSize: 16,
-    color: Colors.textPrimary,
-  },
-  notesTextInput: {
-    height: 80,
-    textAlignVertical: 'top',
-  },
-  bookingSummary: {
-    backgroundColor: Colors.backgroundSecondary,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  summaryTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.textPrimary,
-    marginBottom: 12,
-  },
-  summaryItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  summaryLabel: {
-    fontSize: 14,
+  distanceText: {
+    fontSize: 12,
     color: Colors.textSecondary,
   },
-  summaryValue: {
+  priceContainer: {
+    alignItems: 'flex-end',
+  },
+  priceText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: Colors.secondary,
+  },
+  priceLabel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  professionalDescription: {
     fontSize: 14,
-    color: Colors.textPrimary,
-    fontWeight: '500',
+    color: Colors.textSecondary,
+    lineHeight: 20,
+    marginBottom: 12,
   },
   bookButton: {
     backgroundColor: Colors.secondary,
-    borderRadius: 12,
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
-  bookButtonDisabled: {
-    opacity: 0.6,
-  },
   bookButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
     color: Colors.textInverse,
+    fontSize: 14,
+    fontWeight: '600',
   },
 }); 

@@ -234,7 +234,7 @@ class CreateAppointmentView(APIView):
             print(f"Professional ID: {professional_id}")
             try:
                 professional = User.objects.get(id=professional_id, role='professional')
-                data['professional'] = professional
+                data['professional'] = professional_id  # Usar el ID en lugar del objeto
                 print(f"Profesional encontrado: {professional.name}")
             except User.DoesNotExist:
                 print(f"Profesional no encontrado con ID: {professional_id}")

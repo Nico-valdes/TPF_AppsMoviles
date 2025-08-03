@@ -27,7 +27,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     role = models.CharField(max_length=20, choices=ROLE_CHOICES)
     lastName = models.CharField(max_length=45, blank=True, null=True)
     bio = models.TextField(blank=True, null=True)
-    profileImage = models.ImageField(upload_to='profile_images/', blank=True, null=True)
+    profileImage = models.CharField(max_length=500, blank=True, null=True)  # Puede ser URL externa o ruta local
     created_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)  # Necesario para superuser
