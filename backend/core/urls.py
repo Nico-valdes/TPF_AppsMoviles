@@ -6,7 +6,7 @@ from .views import (
     AppointmentViewSet, ChatViewSet, MessageViewSet, RegisterView, 
     CustomTokenObtainPairView, CurrentUserView, UpcomingAppointmentsView,
     BecomeProfessionalView, ProfessionalsListView, ProfessionalDetailView,
-    CreateAppointmentView, UpdateAppointmentStatusView, ReviewView, NotificationsView,
+    CreateAppointmentView, UpdateAppointmentStatusView, CancelAppointmentView, ReviewView, NotificationsView,
     AvailableSlotsView,
 )
 
