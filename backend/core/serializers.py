@@ -105,3 +105,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data['name'] = self.user.name
         data['role'] = self.user.role
         return data
+
+class MessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Message
+        fields = '__all__'

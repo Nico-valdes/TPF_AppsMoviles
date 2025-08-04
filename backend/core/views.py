@@ -8,7 +8,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.contrib.auth.hashers import make_password
 from django.db import models
 from django.utils import timezone
-from .models import User, ProfessionalDetail, Schedule, Appointment, Chat, Message, Review, Notification
+from .models import User, ProfessionalDetail, Schedule, Appointment, Chat, Message, Review, Notification, ChatRoom, ChatMessage
 from .serializers import (
     UserSerializer, ProfessionalDetailSerializer, ProfessionalListSerializer, ScheduleSerializer,
     AppointmentSerializer, AppointmentCreateSerializer, ChatSerializer, MessageSerializer, 
@@ -544,3 +544,203 @@ class AvailableSlotsView(APIView):
                 {'error': 'Error interno del servidor'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+## Vistas para asgi
+class ChatRoomListView(APIView):
+    """Lista las salas de chat del usuario"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        try:
+            rooms = ChatRoom.objects.filter(
+                participants=request.user,
+                is_active=True
+            ).prefetch_related('participants', 'messages')
+            
+            rooms_data = []
+            for room in rooms:
+                # Obtener último mensaje
+                last_message = room.messages.last()
+                
+                # Obtener el otro participante (en chat privado)
+                other_participant = room.participants.exclude(id=request.user.id).first()
+                
+                rooms_data.append({
+                    'id': room.id,
+                    'name': room.name,
+                    'other_user': {
+                        'id': other_participant.id if other_participant else None,
+                        'name': other_participant.name if other_participant else None,
+                        'email': other_participant.email if other_participant else None,
+                    },
+                    'last_message': {
+                        'text': last_message.message if last_message else None,
+                        'timestamp': last_message.timestamp if last_message else None,
+                        'sender': last_message.sender.name if last_message else None,
+                    },
+                    'updated_at': room.updated_at,
+                })
+            
+            return Response({
+                'success': True,
+                'rooms': rooms_data
+            })
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+
+class CreateChatRoomView(APIView):
+    """Crear sala de chat entre dos usuarios"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        try:
+            other_user_id = request.data.get('user_id')
+            
+            if not other_user_id:
+                return Response({
+                    'success': False,
+                    'error': 'user_id es requerido'
+                }, status=400)
+            
+            try:
+                other_user = User.objects.get(id=other_user_id)
+            except User.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'error': 'Usuario no encontrado'
+                }, status=404)
+            
+            if other_user == request.user:
+                return Response({
+                    'success': False,
+                    'error': 'No puedes crear un chat contigo mismo'
+                }, status=400)
+            
+            # Crear o obtener sala privada
+            room, created = ChatRoom.get_or_create_private_room(request.user, other_user)
+            
+            return Response({
+                'success': True,
+                'room': {
+                    'id': room.id,
+                    'name': room.name,
+                    'created': created,
+                    'other_user': {
+                        'id': other_user.id,
+                        'name': other_user.name,
+                        'email': other_user.email,
+                    }
+                }
+            })
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+
+class ChatMessagesView(APIView):
+    """Obtener mensajes de una sala de chat"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, room_id):
+        try:
+            # Verificar que el usuario pertenece a la sala
+            room = ChatRoom.objects.get(
+                id=room_id,
+                participants=request.user,
+                is_active=True
+            )
+            
+            # Obtener mensajes
+            messages = ChatMessage.objects.filter(room=room).select_related('sender')
+            
+            messages_data = []
+            for message in messages:
+                messages_data.append({
+                    'id': message.id,
+                    'message': message.message,
+                    'sender': {
+                        'id': message.sender.id,
+                        'name': message.sender.name,
+                    },
+                    'timestamp': message.timestamp,
+                    'is_read': message.is_read,
+                    'message_type': message.message_type,
+                })
+            
+            return Response({
+                'success': True,
+                'messages': messages_data
+            })
+            
+        except ChatRoom.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': 'Sala de chat no encontrada'
+            }, status=404)
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+
+class SendMessageView(APIView):
+    """Enviar mensaje a una sala de chat"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, room_id):
+        try:
+            room = ChatRoom.objects.get(
+                id=room_id,
+                participants=request.user,
+                is_active=True
+            )
+            
+            message_text = request.data.get('message')
+            if not message_text:
+                return Response({
+                    'success': False,
+                    'error': 'Mensaje es requerido'
+                }, status=400)
+            
+            # Crear mensaje
+            message = ChatMessage.objects.create(
+                room=room,
+                sender=request.user,
+                message=message_text,
+                message_type=request.data.get('message_type', 'text')
+            )
+            
+            # Actualizar timestamp de la sala
+            room.updated_at = timezone.now()
+            room.save()
+            
+            return Response({
+                'success': True,
+                'message': {
+                    'id': message.id,
+                    'message': message.message,
+                    'sender': {
+                        'id': message.sender.id,
+                        'name': message.sender.name,
+                    },
+                    'timestamp': message.timestamp,
+                    'message_type': message.message_type,
+                }
+            })
+            
+        except ChatRoom.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': 'Sala de chat no encontrada'
+            }, status=404)
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=500)            

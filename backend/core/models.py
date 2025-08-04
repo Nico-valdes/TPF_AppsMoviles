@@ -169,3 +169,75 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"{self.user.name}: {self.title}"
+
+## Modelos para mensajeria en tiempo real papuuuu todo websockets asgi papuuu
+
+class ChatRoom(models.Model):
+    """Sala de chat entre dos usuarios"""
+    name = models.CharField(max_length=255, unique=True)
+    participants = models.ManyToManyField(User, related_name='chat_rooms')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        ordering = ['-updated_at']
+    
+    def __str__(self):
+        return f"Chat: {self.name}"
+    
+    @classmethod
+    def get_or_create_private_room(cls, user1, user2):
+        """Crear o obtener sala privada entre dos usuarios"""
+        # Crear nombre único para la sala
+        users_ids = sorted([user1.id, user2.id])
+        room_name = f"private_{users_ids[0]}_{users_ids[1]}"
+        
+        room, created = cls.objects.get_or_create(
+            name=room_name,
+            defaults={'is_active': True}
+        )
+        
+        if created:
+            room.participants.add(user1, user2)
+        
+        return room, created
+
+class ChatMessage(models.Model):
+    """Mensajes del chat"""
+    room = models.ForeignKey(ChatRoom, on_delete=models.CASCADE, related_name='messages')
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
+    message = models.TextField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+    is_read = models.BooleanField(default=False)
+    message_type = models.CharField(
+        max_length=20, 
+        choices=[
+            ('text', 'Text'),
+            ('image', 'Image'),
+            ('file', 'File'),
+        ],
+        default='text'
+    )
+    
+    class Meta:
+        ordering = ['timestamp']
+    
+    def __str__(self):
+        return f"{self.sender.name}: {self.message[:50]}"
+
+class ChatParticipant(models.Model):
+    """Participantes del chat con metadata"""
+    room = models.ForeignKey(ChatRoom, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    joined_at = models.DateTimeField(auto_now_add=True)
+    last_read_message = models.ForeignKey(
+        ChatMessage, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='last_read_by'
+    )
+    
+    class Meta:
+        unique_together = ['room', 'user']
