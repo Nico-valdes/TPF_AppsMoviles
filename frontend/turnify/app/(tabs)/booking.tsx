@@ -142,16 +142,23 @@ export default function Booking() {
   };
 
   const handleProfessionalPress = (professional: Professional) => {
-    (navigation as any).navigate('booking-details', { 
-      selectedProfessional: {
-        id: professional.professional.id,
-        name: professional.professional.name,
-        category: professional.category_display,
-        rating: professional.rating,
-        hourlyRate: professional.hourly_rate,
-        profileImage: professional.professional.profileImage,
-        distance: professional.distance,
-      }
+    // Pasar todos los datos necesarios del profesional
+    const professionalData = {
+      id: professional.professional.id,
+      name: professional.professional.name,
+      category: professional.category_display,
+      rating: professional.rating.toString(),
+      hourlyRate: professional.hourly_rate.toString(),
+      profileImage: professional.professional.profileImage,
+      distance: professional.distance,
+      description: professional.description,
+      address: professional.address,
+      is_verified: professional.is_verified,
+      total_reviews: professional.total_reviews,
+    };
+    
+    (navigation as any).navigate('booking-details', {
+      selectedProfessional: professionalData
     });
   };
 

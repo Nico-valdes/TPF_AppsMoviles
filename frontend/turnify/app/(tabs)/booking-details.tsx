@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../providers/AuthProvider';
 import { API_BASE_URL } from '../../constants/Config';
 import { Colors } from '../../constants/Colors';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { Calendar } from 'react-native-calendars';
 
 interface SelectedProfessional {
@@ -28,6 +28,10 @@ interface SelectedProfessional {
   hourlyRate: string;
   profileImage?: string;
   distance?: number;
+  description?: string;
+  address?: string;
+  is_verified?: boolean;
+  total_reviews?: number;
 }
 
 interface RouteParams {
@@ -36,28 +40,68 @@ interface RouteParams {
 
 export default function BookingDetails() {
   const { user } = useAuth();
-  const params = useLocalSearchParams();
-  const professional = params.selectedProfessional ? JSON.parse(params.selectedProfessional as string) : null;
+  const navigation = useNavigation();
+  const route = useRoute();
+  const params = route.params as RouteParams;
   
+  // Validar y obtener los datos del profesional
+  const [professional, setProfessional] = useState<SelectedProfessional | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    try {
+      if (params?.selectedProfessional) {
+        console.log('📋 Datos del profesional recibidos:', params.selectedProfessional);
+        setProfessional(params.selectedProfessional);
+      } else {
+        console.error('❌ No se recibieron datos del profesional');
+        Alert.alert(
+          'Error',
+          'No se pudieron cargar los datos del profesional. Por favor, vuelve a intentar.',
+          [
+            {
+              text: 'Volver',
+              onPress: () => navigation.goBack()
+            }
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('❌ Error procesando datos del profesional:', error);
+      Alert.alert(
+        'Error',
+        'Error al cargar los datos del profesional. Por favor, vuelve a intentar.',
+        [
+          {
+            text: 'Volver',
+            onPress: () => navigation.goBack()
+          }
+        ]
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [params?.selectedProfessional]);
+
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
   const [showTimeModal, setShowTimeModal] = useState(false);
   const [service, setService] = useState('');
   const [notes, setNotes] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [bookingLoading, setBookingLoading] = useState(false);
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   // Efecto para obtener horarios cuando cambia la fecha
   useEffect(() => {
-    if (selectedDate) {
+    if (selectedDate && professional) {
       // Limpiar horarios anteriores
       setAvailableSlots([]);
       setSelectedTime('');
       fetchAvailableSlots(selectedDate);
     }
-  }, [selectedDate]);
+  }, [selectedDate, professional]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -66,7 +110,7 @@ export default function BookingDetails() {
 
   // Función para obtener horarios disponibles
   const fetchAvailableSlots = async (date: string) => {
-    if (!date) return;
+    if (!date || !professional) return;
     
     setLoadingSlots(true);
     setAvailableSlots([]); // Limpiar slots anteriores
@@ -115,7 +159,7 @@ export default function BookingDetails() {
   };
 
   const handleBooking = async () => {
-    if (!selectedDate || !selectedTime || !service.trim()) {
+    if (!selectedDate || !selectedTime || !service.trim() || !professional) {
       Alert.alert(
         'Campos Incompletos', 
         'Por favor completa todos los campos obligatorios:\n\n• Fecha seleccionada\n• Hora seleccionada\n• Servicio requerido',
@@ -129,7 +173,7 @@ export default function BookingDetails() {
       return;
     }
 
-    setLoading(true);
+    setBookingLoading(true);
     try {
       const appointmentData = {
         professional: professional.id,
@@ -158,14 +202,14 @@ export default function BookingDetails() {
               text: 'Ver mis turnos',
               onPress: () => {
                 // Redirigir a la página de mis turnos
-                router.push('/(tabs)/my-appointments');
+                (navigation as any).navigate('my-appointments');
               }
             },
             {
               text: 'Ir al inicio',
               onPress: () => {
                 // Redirigir al home después de la reserva exitosa
-                router.push('/(tabs)/home');
+                (navigation as any).navigate('home');
               }
             }
           ]
@@ -191,7 +235,7 @@ export default function BookingDetails() {
         ]
       );
     } finally {
-      setLoading(false);
+      setBookingLoading(false);
     }
   };
 
@@ -210,9 +254,34 @@ export default function BookingDetails() {
     console.log('Hora seleccionada:', time);
   };
 
+  // Mostrar loading mientras se cargan los datos del profesional
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.secondary} />
+        <Text style={styles.loadingText}>Cargando datos del profesional...</Text>
+      </View>
+    );
+  }
 
-
-
+  // Si no hay datos del profesional, mostrar error
+  if (!professional) {
+    return (
+      <View style={styles.errorContainer}>
+        <Ionicons name="alert-circle" size={64} color={Colors.error} />
+        <Text style={styles.errorTitle}>Error al cargar datos</Text>
+        <Text style={styles.errorMessage}>
+          No se pudieron cargar los datos del profesional. Por favor, vuelve a intentar.
+        </Text>
+        <TouchableOpacity
+          style={styles.errorButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.errorButtonText}>Volver</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <ScrollView 
@@ -228,7 +297,7 @@ export default function BookingDetails() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={() => navigation.goBack()}
         >
           <Ionicons name="arrow-back" size={24} color={Colors.textInverse} />
         </TouchableOpacity>
@@ -376,14 +445,14 @@ export default function BookingDetails() {
         <TouchableOpacity
           style={[
             styles.bookButton, 
-            loading && styles.bookButtonDisabled,
+            bookingLoading && styles.bookButtonDisabled,
             // Resaltar cuando todos los campos estén completos
             selectedDate && selectedTime && service.trim() && styles.bookButtonReady
           ]}
           onPress={handleBooking}
-          disabled={loading}
+          disabled={bookingLoading}
         >
-          {loading ? (
+          {bookingLoading ? (
             <ActivityIndicator size="small" color={Colors.textInverse} />
           ) : (
             <>
@@ -407,7 +476,7 @@ export default function BookingDetails() {
           <TouchableOpacity
             style={styles.floatingButtonTouchable}
             onPress={handleBooking}
-            disabled={loading}
+            disabled={bookingLoading}
           >
             <Ionicons name="calendar" size={24} color={Colors.textInverse} />
             <Text style={styles.floatingButtonText}>Confirmar Reserva</Text>
@@ -780,5 +849,47 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
     marginTop: 4,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: Colors.textSecondary,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: Colors.background,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: Colors.textPrimary,
+    marginTop: 10,
+  },
+  errorMessage: {
+    fontSize: 16,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 5,
+    marginBottom: 20,
+  },
+  errorButton: {
+    backgroundColor: Colors.secondary,
+    paddingVertical: 12,
+    paddingHorizontal: 25,
+    borderRadius: 25,
+  },
+  errorButtonText: {
+    color: Colors.textInverse,
+    fontSize: 16,
+    fontWeight: '600',
   },
 }); 
