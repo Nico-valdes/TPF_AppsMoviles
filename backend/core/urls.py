@@ -31,6 +31,7 @@ urlpatterns = [
     # Turnos
     path('appointments/create/', CreateAppointmentView.as_view(), name='create_appointment'),
     path('appointments/<int:appointment_id>/status/', UpdateAppointmentStatusView.as_view(), name='update_appointment_status'),
+    path('appointments/<int:appointment_id>/cancel/', CancelAppointmentView.as_view(), name='cancel_appointment'),
     
     # Reseñas
     path('reviews/', ReviewView.as_view(), name='create_review'),

@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../providers/AuthProvider';
 import { API_BASE_URL } from '../../constants/Config';
 import { Colors } from '../../constants/Colors';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Calendar } from 'react-native-calendars';
 
 interface SelectedProfessional {
@@ -36,9 +36,8 @@ interface RouteParams {
 
 export default function BookingDetails() {
   const { user } = useAuth();
-  const navigation = useNavigation();
-  const route = useRoute();
-  const { selectedProfessional } = route.params as RouteParams;
+  const params = useLocalSearchParams();
+  const professional = params.selectedProfessional ? JSON.parse(params.selectedProfessional as string) : null;
   
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
@@ -73,10 +72,10 @@ export default function BookingDetails() {
     setAvailableSlots([]); // Limpiar slots anteriores
     
     try {
-      const url = `${API_BASE_URL}/api/professionals/${selectedProfessional.id}/available-slots/?date=${date}`;
+      const url = `${API_BASE_URL}/api/professionals/${professional.id}/available-slots/?date=${date}`;
       console.log('🔍 Llamando a:', url);
       console.log('📅 Fecha seleccionada:', date);
-      console.log('👤 ID del profesional:', selectedProfessional.id);
+      console.log('👤 ID del profesional:', professional.id);
       
       const response = await fetch(url, {
         method: 'GET',
@@ -133,7 +132,7 @@ export default function BookingDetails() {
     setLoading(true);
     try {
       const appointmentData = {
-        professional: selectedProfessional.id,
+        professional: professional.id,
         date: selectedDate,
         start_time: selectedTime,
         service: service.trim(),
@@ -153,20 +152,20 @@ export default function BookingDetails() {
         const responseData = await response.json();
         Alert.alert(
           '¡Reserva Exitosa! 🎉',
-          `Tu turno con ${selectedProfessional.name} ha sido reservado correctamente para el ${selectedDate} a las ${selectedTime}. Recibirás una confirmación por email.`,
+          `Tu turno con ${professional.name} ha sido reservado correctamente para el ${selectedDate} a las ${selectedTime}. Recibirás una confirmación por email.`,
           [
             {
               text: 'Ver mis turnos',
               onPress: () => {
                 // Redirigir a la página de mis turnos
-                (navigation as any).navigate('my-appointments');
+                router.push('/(tabs)/my-appointments');
               }
             },
             {
               text: 'Ir al inicio',
               onPress: () => {
                 // Redirigir al home después de la reserva exitosa
-                (navigation as any).navigate('home');
+                router.push('/(tabs)/home');
               }
             }
           ]
@@ -229,7 +228,7 @@ export default function BookingDetails() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={() => router.back()}
         >
           <Ionicons name="arrow-back" size={24} color={Colors.textInverse} />
         </TouchableOpacity>
@@ -242,37 +241,37 @@ export default function BookingDetails() {
         <View style={styles.professionalHeader}>
           <Image
             source={
-              selectedProfessional.profileImage
-                ? { uri: selectedProfessional.profileImage.startsWith('http') 
-                    ? selectedProfessional.profileImage 
-                    : `${API_BASE_URL}${selectedProfessional.profileImage}` }
+              professional.profileImage
+                ? { uri: professional.profileImage.startsWith('http') 
+                    ? professional.profileImage 
+                    : `${API_BASE_URL}${professional.profileImage}` }
                 : require('../../assets/images/icon.png')
             }
             style={styles.professionalAvatar}
             onError={(error) => {
-              console.log('Error loading image for:', selectedProfessional.name, error);
+              console.log('Error loading image for:', professional.name, error);
               // Fallback a imagen local si hay error
               return require('../../assets/images/icon.png');
             }}
-            onLoad={() => console.log('Image loaded successfully for:', selectedProfessional.name)}
+            onLoad={() => console.log('Image loaded successfully for:', professional.name)}
             resizeMode="cover"
           />
           <View style={styles.professionalInfo}>
-            <Text style={styles.professionalName}>{selectedProfessional.name}</Text>
-            <Text style={styles.professionalCategory}>{selectedProfessional.category}</Text>
+            <Text style={styles.professionalName}>{professional.name}</Text>
+            <Text style={styles.professionalCategory}>{professional.category}</Text>
             <View style={styles.professionalDetails}>
               <View style={styles.ratingContainer}>
                 <Ionicons name="star" size={16} color={Colors.warning} />
-                <Text style={styles.ratingText}>{selectedProfessional.rating}</Text>
+                <Text style={styles.ratingText}>{professional.rating}</Text>
               </View>
-              <Text style={styles.priceText}>${selectedProfessional.hourlyRate}/hora</Text>
-              {selectedProfessional.distance && (
+              <Text style={styles.priceText}>${professional.hourlyRate}/hora</Text>
+              {professional.distance && (
                 <View style={styles.distanceContainer}>
                   <Ionicons name="location" size={14} color={Colors.textSecondary} />
                   <Text style={styles.distanceText}>
-                    {selectedProfessional.distance < 1 
-                      ? `${Math.round(selectedProfessional.distance * 1000)}m` 
-                      : `${selectedProfessional.distance.toFixed(1)}km`
+                    {professional.distance < 1 
+                      ? `${Math.round(professional.distance * 1000)}m` 
+                      : `${professional.distance.toFixed(1)}km`
                     }
                   </Text>
                 </View>

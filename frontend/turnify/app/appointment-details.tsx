@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -14,8 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../providers/AuthProvider';
 import { API_BASE_URL } from '../constants/Config';
 import { Colors } from '../constants/Colors';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, router } from 'expo-router';
 import { Calendar } from 'react-native-calendars';
 
 interface Appointment {
@@ -30,15 +29,22 @@ interface Appointment {
   notes?: string;
 }
 
-interface RouteParams {
-  appointment: Appointment;
-}
+
 
 export default function AppointmentDetails() {
   const { user } = useAuth();
-  const navigation = useNavigation();
   const params = useLocalSearchParams();
   const appointment = params.appointment ? JSON.parse(params.appointment as string) : null;
+  
+  // Hooks deben estar al principio, antes de cualquier return
+  const [selectedDate, setSelectedDate] = useState(appointment?.date || '');
+  const [selectedTime, setSelectedTime] = useState(appointment?.start_time || '');
+  const [showTimeModal, setShowTimeModal] = useState(false);
+  const [service, setService] = useState(appointment?.service || '');
+  const [notes, setNotes] = useState(appointment?.notes || '');
+
+  const [cancelling, setCancelling] = useState(false);
+  const [saving, setSaving] = useState(false);
   
   console.log('AppointmentDetails mounted with appointment:', appointment);
   
@@ -48,7 +54,7 @@ export default function AppointmentDetails() {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => router.back()}
           >
             <Ionicons name="arrow-back" size={24} color={Colors.textInverse} />
           </TouchableOpacity>
@@ -61,15 +67,6 @@ export default function AppointmentDetails() {
       </View>
     );
   }
-  
-  const [selectedDate, setSelectedDate] = useState(appointment.date);
-  const [selectedTime, setSelectedTime] = useState(appointment.start_time);
-  const [showTimeModal, setShowTimeModal] = useState(false);
-  const [service, setService] = useState(appointment.service || '');
-  const [notes, setNotes] = useState(appointment.notes || '');
-  const [loading, setLoading] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
-  const [saving, setSaving] = useState(false);
 
   const timeSlots = [
     '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
@@ -97,9 +94,13 @@ export default function AppointmentDetails() {
     switch (status) {
       case 'pending':
         return Colors.warning;
+      case 'confirmed':
+        return Colors.secondary;
       case 'completed':
         return Colors.success;
       case 'cancelled':
+        return Colors.error;
+      case 'no_show':
         return Colors.error;
       default:
         return Colors.textSecondary;
@@ -110,10 +111,14 @@ export default function AppointmentDetails() {
     switch (status) {
       case 'pending':
         return 'Pendiente';
+      case 'confirmed':
+        return 'Confirmado';
       case 'completed':
         return 'Completado';
       case 'cancelled':
         return 'Cancelado';
+      case 'no_show':
+        return 'No se presentó';
       default:
         return status;
     }
@@ -136,26 +141,8 @@ export default function AppointmentDetails() {
 
     setSaving(true);
     try {
-      // Simulación de actualización - en producción esto debería llamar al endpoint correcto
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simular delay de red
-      
-      Alert.alert(
-        'Cambios Guardados ✅',
-        'Tu turno ha sido actualizado exitosamente.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              (navigation as any).navigate('home');
-            }
-          }
-        ]
-      );
-      
-      // En producción, aquí harías la llamada real al API:
-      /*
-      const response = await fetch(`${API_BASE_URL}/api/appointments/${appointment.id}/update/`, {
-        method: 'PUT',
+      const response = await fetch(`${API_BASE_URL}/api/appointments/${appointment.id}/status/`, {
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${user?.token}`,
@@ -169,12 +156,22 @@ export default function AppointmentDetails() {
       });
 
       if (response.ok) {
-        // Mostrar alerta de éxito
+        Alert.alert(
+          'Cambios Guardados ✅',
+          'Tu turno ha sido actualizado exitosamente.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                router.push('/(tabs)/home');
+              }
+            }
+          ]
+        );
       } else {
         const errorData = await response.json();
-        Alert.alert('Error', errorData.message || 'Error al actualizar el turno.');
+        Alert.alert('Error', errorData.error || 'Error al actualizar el turno.');
       }
-      */
       
     } catch (error) {
       console.error('Error updating appointment:', error);
@@ -212,42 +209,31 @@ export default function AppointmentDetails() {
           onPress: async () => {
             setCancelling(true);
             try {
-              // Simulación de cancelación - en producción esto debería llamar al endpoint correcto
-              await new Promise(resolve => setTimeout(resolve, 1000)); // Simular delay de red
-              
-              Alert.alert(
-                'Turno Cancelado ✅',
-                'Tu turno ha sido cancelado exitosamente. Se ha enviado una notificación al profesional.',
-                [
-                  {
-                    text: 'Ir al inicio',
-                    onPress: () => {
-                      (navigation as any).navigate('home');
-                    }
-                  }
-                ]
-              );
-              
-              // En producción, aquí harías la llamada real al API:
-              /*
               const response = await fetch(`${API_BASE_URL}/api/appointments/${appointment.id}/cancel/`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
                   'Authorization': `Bearer ${user?.token}`,
                 },
-                body: JSON.stringify({
-                  reason: 'Cancelado por el usuario'
-                }),
               });
 
               if (response.ok) {
-                // Mostrar alerta de éxito
+                Alert.alert(
+                  'Turno Cancelado ✅',
+                  'Tu turno ha sido cancelado exitosamente. Se ha enviado una notificación al profesional.',
+                  [
+                    {
+                      text: 'Ir al inicio',
+                      onPress: () => {
+                        router.push('/(tabs)/home');
+                      }
+                    }
+                  ]
+                );
               } else {
                 const errorData = await response.json();
-                Alert.alert('Error', errorData.message || 'Error al cancelar el turno.');
+                Alert.alert('Error', errorData.error || 'Error al cancelar el turno.');
               }
-              */
               
             } catch (error) {
               console.error('Error cancelling appointment:', error);
@@ -289,7 +275,7 @@ export default function AppointmentDetails() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={() => router.back()}
         >
           <Ionicons name="arrow-back" size={24} color={Colors.textInverse} />
         </TouchableOpacity>
@@ -332,7 +318,11 @@ export default function AppointmentDetails() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Cambiar fecha</Text>
         <Calendar
-          onDayPress={(day) => setSelectedDate(day.dateString)}
+          onDayPress={(day) => {
+            if (appointment.status !== 'cancelled' && appointment.status !== 'completed') {
+              setSelectedDate(day.dateString);
+            }
+          }}
           markedDates={{
             [selectedDate]: {
               selected: true,
@@ -343,11 +333,11 @@ export default function AppointmentDetails() {
             selectedDayBackgroundColor: Colors.secondary,
             selectedDayTextColor: Colors.textInverse,
             todayTextColor: Colors.secondary,
-            dayTextColor: Colors.textPrimary,
+            dayTextColor: appointment.status === 'cancelled' || appointment.status === 'completed' ? Colors.textTertiary : Colors.textPrimary,
             textDisabledColor: Colors.textTertiary,
-            arrowColor: Colors.secondary,
-            monthTextColor: Colors.textPrimary,
-            indicatorColor: Colors.secondary,
+            arrowColor: appointment.status === 'cancelled' || appointment.status === 'completed' ? Colors.textTertiary : Colors.secondary,
+            monthTextColor: appointment.status === 'cancelled' || appointment.status === 'completed' ? Colors.textTertiary : Colors.textPrimary,
+            indicatorColor: appointment.status === 'cancelled' || appointment.status === 'completed' ? Colors.textTertiary : Colors.secondary,
             textDayFontWeight: '300',
             textMonthFontWeight: 'bold',
             textDayHeaderFontWeight: '300',
@@ -364,12 +354,19 @@ export default function AppointmentDetails() {
         <Text style={styles.sectionTitle}>Cambiar hora</Text>
         
         <TouchableOpacity
-          style={styles.timeSelectorButton}
+          style={[
+            styles.timeSelectorButton,
+            (appointment.status === 'cancelled' || appointment.status === 'completed') && styles.timeSelectorButtonDisabled
+          ]}
           onPress={showTimeSelector}
           activeOpacity={0.7}
+          disabled={appointment.status === 'cancelled' || appointment.status === 'completed'}
         >
           <Ionicons name="time" size={20} color={Colors.textSecondary} />
-          <Text style={styles.timeSelectorText}>
+          <Text style={[
+            styles.timeSelectorText,
+            (appointment.status === 'cancelled' || appointment.status === 'completed') && styles.timeSelectorTextDisabled
+          ]}>
             {selectedTime || 'Seleccionar hora'}
           </Text>
           <Ionicons name="chevron-down" size={16} color={Colors.textSecondary} />
@@ -380,12 +377,16 @@ export default function AppointmentDetails() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Servicio requerido *</Text>
         <TextInput
-          style={styles.input}
+          style={[
+            styles.input,
+            (appointment.status === 'cancelled' || appointment.status === 'completed') && styles.inputDisabled
+          ]}
           placeholder="Describe el servicio que necesitas"
           value={service}
           onChangeText={setService}
           placeholderTextColor={Colors.textTertiary}
           multiline
+          editable={appointment.status !== 'cancelled' && appointment.status !== 'completed'}
         />
       </View>
 
@@ -393,47 +394,75 @@ export default function AppointmentDetails() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Notas adicionales (opcional)</Text>
         <TextInput
-          style={[styles.input, styles.notesInput]}
+          style={[
+            styles.input, 
+            styles.notesInput,
+            (appointment.status === 'cancelled' || appointment.status === 'completed') && styles.inputDisabled
+          ]}
           placeholder="Agrega cualquier información adicional..."
           value={notes}
           onChangeText={setNotes}
           placeholderTextColor={Colors.textTertiary}
           multiline
           numberOfLines={4}
+          editable={appointment.status !== 'cancelled' && appointment.status !== 'completed'}
         />
       </View>
 
       {/* Botones de acción */}
       <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-          onPress={handleSaveChanges}
-          disabled={saving}
-        >
-          {saving ? (
-            <ActivityIndicator size="small" color={Colors.textInverse} />
-          ) : (
-            <>
-              <Ionicons name="save" size={20} color={Colors.textInverse} />
-              <Text style={styles.saveButtonText}>Guardar Cambios</Text>
-            </>
-          )}
-        </TouchableOpacity>
+        {/* Solo mostrar botón de guardar si el turno no está cancelado o completado */}
+        {appointment.status !== 'cancelled' && appointment.status !== 'completed' && (
+          <TouchableOpacity
+            style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+            onPress={handleSaveChanges}
+            disabled={saving}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color={Colors.textInverse} />
+            ) : (
+              <>
+                <Ionicons name="save" size={20} color={Colors.textInverse} />
+                <Text style={styles.saveButtonText}>Guardar Cambios</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
         
-        <TouchableOpacity
-          style={[styles.cancelButton, cancelling && styles.cancelButtonDisabled]}
-          onPress={handleCancelAppointment}
-          disabled={cancelling}
-        >
-          {cancelling ? (
-            <ActivityIndicator size="small" color={Colors.error} />
-          ) : (
-            <>
-              <Ionicons name="close-circle" size={20} color={Colors.error} />
-              <Text style={styles.cancelButtonText}>Cancelar Turno</Text>
-            </>
-          )}
-        </TouchableOpacity>
+        {/* Solo mostrar botón de cancelar si el turno no está cancelado o completado */}
+        {appointment.status !== 'cancelled' && appointment.status !== 'completed' && (
+          <TouchableOpacity
+            style={[styles.cancelButton, cancelling && styles.cancelButtonDisabled]}
+            onPress={handleCancelAppointment}
+            disabled={cancelling}
+          >
+            {cancelling ? (
+              <ActivityIndicator size="small" color={Colors.error} />
+            ) : (
+              <>
+                <Ionicons name="close-circle" size={20} color={Colors.error} />
+                <Text style={styles.cancelButtonText}>Cancelar Turno</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
+        
+        {/* Mostrar mensaje si el turno está cancelado o completado */}
+        {(appointment.status === 'cancelled' || appointment.status === 'completed') && (
+          <View style={styles.statusMessageContainer}>
+            <Ionicons 
+              name={appointment.status === 'cancelled' ? 'close-circle' : 'checkmark-circle'} 
+              size={24} 
+              color={appointment.status === 'cancelled' ? Colors.error : Colors.success} 
+            />
+            <Text style={[
+              styles.statusMessageText,
+              { color: appointment.status === 'cancelled' ? Colors.error : Colors.success }
+            ]}>
+              {appointment.status === 'cancelled' ? 'Turno Cancelado' : 'Turno Completado'}
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Modal desplegable de horarios */}
@@ -540,14 +569,20 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   statusText: { 
-    fontSize: 12, 
+    fontSize: 14, 
     color: Colors.textInverse,
-    fontWeight: '600',
+    fontWeight: '700',
+    textTransform: 'uppercase',
   },
   appointmentDetails: {
     marginTop: 5,
@@ -590,6 +625,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.textPrimary,
   },
+  timeSelectorButtonDisabled: {
+    opacity: 0.5,
+    backgroundColor: Colors.background,
+  },
+  timeSelectorTextDisabled: {
+    color: Colors.textTertiary,
+  },
   input: {
     backgroundColor: Colors.background,
     borderRadius: 12,
@@ -599,6 +641,10 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     borderWidth: 1,
     borderColor: Colors.border,
+  },
+  inputDisabled: {
+    opacity: 0.5,
+    backgroundColor: Colors.background,
   },
   notesInput: {
     height: 100,
@@ -616,6 +662,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    shadowColor: Colors.secondary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   saveButtonDisabled: {
     opacity: 0.6,
@@ -626,22 +677,40 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   cancelButton: {
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.error,
     paddingVertical: 16,
     borderRadius: 25,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    borderWidth: 2,
-    borderColor: Colors.error,
     marginTop: 12,
+    shadowColor: Colors.error,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   cancelButtonDisabled: {
     opacity: 0.6,
   },
   cancelButtonText: {
-    color: Colors.error,
+    color: Colors.textInverse,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  statusMessageContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    backgroundColor: Colors.background,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: 8,
+  },
+  statusMessageText: {
     fontSize: 16,
     fontWeight: '600',
   },

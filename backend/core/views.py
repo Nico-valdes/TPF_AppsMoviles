@@ -318,6 +318,52 @@ class UpdateAppointmentStatusView(APIView):
             return Response({'error': 'Turno no encontrado'}, status=status.HTTP_404_NOT_FOUND)
 
 
+class CancelAppointmentView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, appointment_id):
+        try:
+            appointment = Appointment.objects.get(id=appointment_id)
+            
+            # Verificar que el usuario es el cliente o el profesional del turno
+            if request.user != appointment.regular and request.user != appointment.professional:
+                return Response({'error': 'No tienes permisos para cancelar este turno'}, status=status.HTTP_403_FORBIDDEN)
+            
+            # Verificar que el turno no esté ya cancelado o completado
+            if appointment.status in ['cancelled', 'completed']:
+                return Response({'error': 'No se puede cancelar un turno que ya está cancelado o completado'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Cancelar el turno
+            appointment.status = 'cancelled'
+            appointment.save()
+            
+            # Crear notificación para la otra parte
+            if request.user == appointment.regular:
+                # Cliente canceló, notificar al profesional
+                Notification.objects.create(
+                    user=appointment.professional,
+                    type='appointment_cancelled',
+                    title='Turno cancelado por el cliente',
+                    message=f'El cliente {appointment.regular.name} ha cancelado el turno del {appointment.date}',
+                    related_appointment=appointment
+                )
+            else:
+                # Profesional canceló, notificar al cliente
+                Notification.objects.create(
+                    user=appointment.regular,
+                    type='appointment_cancelled',
+                    title='Turno cancelado por el profesional',
+                    message=f'El profesional {appointment.professional.name} ha cancelado el turno del {appointment.date}',
+                    related_appointment=appointment
+                )
+            
+            return Response({'message': 'Turno cancelado exitosamente'}, status=status.HTTP_200_OK)
+            
+        except Appointment.DoesNotExist:
+            return Response({'error': 'Turno no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+
+
 class ReviewView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
