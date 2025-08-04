@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import Home from './home';
 import PerfilStack from './perfil-stack';
 import CategoriesStack from './categories-stack';
+import Messages from './messages';
 
 const Tab = createBottomTabNavigator();
 
@@ -39,6 +40,8 @@ export default function AppLayout() {
           iconName = 'home';
         } else if (route.name === 'booking') {
           iconName = 'calendar';
+        } else if (route.name === 'messages') {
+          iconName = 'chatbubbles';
         } else if (route.name === 'profile') {
           iconName = 'person';
         }
@@ -67,7 +70,7 @@ export default function AppLayout() {
       },
     })}
     >
-            <Tab.Screen name="home" component={Home} options={{ headerShown: false }} />
+      <Tab.Screen name="home" component={Home} options={{ headerShown: false }} />
       <Tab.Screen 
         name="booking" 
         component={CategoriesStack} 
@@ -76,6 +79,17 @@ export default function AppLayout() {
           tabBarLabel: 'Reservar',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="calendar" size={size} color={color} />
+          ),
+        }} 
+      />
+      <Tab.Screen 
+        name="messages" 
+        component={Messages} 
+        options={{ 
+          headerShown: false,
+          tabBarLabel: 'Mensajes',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="chatbubbles" size={size} color={color} />
           ),
         }} 
       />

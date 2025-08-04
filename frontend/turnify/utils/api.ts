@@ -35,7 +35,7 @@ export const apiRequest = async <T>(
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 segundos de timeout
 
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method: 'GET',
+      method: options.method || 'GET',
       headers: {
         'Content-Type': 'application/json',
         ...options.headers,
