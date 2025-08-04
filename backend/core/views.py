@@ -106,6 +106,13 @@ class RegisterView(APIView):
         email = request.data.get('email')
         password = request.data.get('password')
         role = request.data.get('role')
+        
+        # Campos adicionales para profesionales
+        category = request.data.get('category')
+        description = request.data.get('description')
+        latitude = request.data.get('latitude')
+        longitude = request.data.get('longitude')
+        address = request.data.get('address')
 
         if not name or not email or not password or not role:
             return Response({'error': 'Todos los campos son obligatorios.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -116,8 +123,25 @@ class RegisterView(APIView):
         if User.objects.filter(email=email).exists():
             return Response({'error': 'El email ya está registrado.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Si es profesional, verificar campos adicionales
+        if role == 'professional':
+            if not category or not description or not latitude or not longitude or not address:
+                return Response({'error': 'Para registrarse como profesional, debe proporcionar categoría, descripción y ubicación.'}, status=status.HTTP_400_BAD_REQUEST)
+
         user = User.objects.create_user(name=name, email=email, password=password, role=role)
         user.save()
+        
+        # Si es profesional, crear ProfessionalDetail
+        if role == 'professional':
+            ProfessionalDetail.objects.create(
+                professional=user,
+                category=category,
+                description=description,
+                latitude=latitude,
+                longitude=longitude,
+                address=address
+            )
+        
         return Response({'message': 'Usuario registrado correctamente.'}, status=status.HTTP_201_CREATED)
 
 class LoginView(TokenObtainPairView):

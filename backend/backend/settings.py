@@ -27,7 +27,7 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-z=o)!ok_8voe=csgis1w8
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '192.168.1.39', '.herokuapp.com', '.vercel.app', '.railway.app']
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '192.168.1.39', '192.168.0.155', '.herokuapp.com', '.vercel.app', '.railway.app']
 
 # Application definition
 
