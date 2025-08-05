@@ -7,7 +7,7 @@ from .views import (
     CustomTokenObtainPairView, CurrentUserView, UpcomingAppointmentsView,
     BecomeProfessionalView, ProfessionalsListView, ProfessionalDetailView,
     CreateAppointmentView, UpdateAppointmentStatusView, CancelAppointmentView, ReviewView, NotificationsView,
-    AvailableSlotsView, ChatRoomListView, CreateChatRoomView, ChatMessagesView, SendMessageView
+    AvailableSlotsView, ChatRoomListView, CreateChatRoomView, ChatMessagesView, SendMessageView, MarkMessagesAsReadView
 )
 
 router = DefaultRouter()
@@ -45,6 +45,7 @@ urlpatterns = [
     path('chat/create/', CreateChatRoomView.as_view(), name='create-chat'),
     path('chat/<int:room_id>/messages/', ChatMessagesView.as_view(), name='chat-messages'),
     path('chat/<int:room_id>/send/', SendMessageView.as_view(), name='send-message'),
+    path('chat/<int:room_id>/read/', MarkMessagesAsReadView.as_view(), name='mark-messages-read'),
 
     path('', include(router.urls)),
     path('register/', RegisterView.as_view(), name='register'),

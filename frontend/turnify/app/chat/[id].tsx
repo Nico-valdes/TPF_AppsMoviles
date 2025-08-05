@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,11 +10,13 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  SafeAreaView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useAuth } from '../../providers/AuthProvider';
 import { apiRequest, showApiError } from '../../utils/api';
+import { useChatUpdate } from '../../hooks/useChatUpdate';
 
 interface Message {
   id: number;
@@ -57,7 +59,7 @@ export default function ChatScreen() {
   const [sending, setSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
-  const fetchMessages = async () => {
+  const fetchMessages = useCallback(async () => {
     try {
       const result = await apiRequest<{success: boolean, messages: Message[]}>(`/api/chat/${id}/messages/`, {
         headers: {
@@ -76,9 +78,9 @@ export default function ChatScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, user?.token]);
 
-  const fetchChatRoom = async () => {
+  const fetchChatRoom = useCallback(async () => {
     try {
       // Obtener todas las salas y encontrar la específica
       const result = await apiRequest<{success: boolean, rooms: ChatRoom[]}>(`/api/chat/rooms/`, {
@@ -101,14 +103,36 @@ export default function ChatScreen() {
     } catch (error) {
       console.error('Error fetching chat room:', error);
     }
+  }, [id, user?.token]);
+
+  // Usar el hook de actualización automática para mensajes
+  useChatUpdate({
+    onUpdate: fetchMessages,
+    interval: 2000, // Actualizar cada 2 segundos
+  });
+
+  const markMessagesAsRead = async () => {
+    try {
+      await apiRequest(`/api/chat/${id}/read/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${user?.token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+    } catch (error) {
+      console.error('Error marking messages as read:', error);
+    }
   };
 
   useEffect(() => {
     if (id) {
       fetchChatRoom();
       fetchMessages();
+      // Marcar mensajes como leídos cuando se abre el chat
+      markMessagesAsRead();
     }
-  }, [id]);
+  }, [id, fetchChatRoom, fetchMessages]);
 
   const sendMessage = async () => {
     if (!newMessage.trim() || sending) return;
@@ -132,12 +156,18 @@ export default function ChatScreen() {
         return;
       }
 
-      // Agregar el nuevo mensaje a la lista
+      // Agregar el nuevo mensaje a la lista inmediatamente
       if (result.data && typeof result.data === 'object' && 'message' in result.data) {
         setMessages(prev => [...prev, (result.data as any).message as Message]);
       }
 
       setNewMessage('');
+      
+      // Forzar actualización de mensajes después de enviar
+      setTimeout(() => {
+        fetchMessages();
+      }, 500);
+      
     } catch (error) {
       console.error('Error sending message:', error);
       Alert.alert('Error', 'No se pudo enviar el mensaje');
@@ -210,74 +240,83 @@ export default function ChatScreen() {
   const otherParticipant = getOtherParticipant();
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#ffffff" />
-        </TouchableOpacity>
-        
-        <View style={styles.headerInfo}>
-          <Text style={styles.headerName}>
-            {otherParticipant?.name || 'Chat'}
-          </Text>
-          <Text style={styles.headerStatus}>En línea</Text>
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView 
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#ffffff" />
+          </TouchableOpacity>
+          
+          <View style={styles.headerInfo}>
+            <Text style={styles.headerName}>
+              {otherParticipant?.name || 'Chat'}
+            </Text>
+            <Text style={styles.headerStatus}>En línea</Text>
+          </View>
+          
+          <TouchableOpacity style={styles.moreButton}>
+            <Ionicons name="ellipsis-vertical" size={24} color="#ffffff" />
+          </TouchableOpacity>
         </View>
-        
-        <TouchableOpacity style={styles.moreButton}>
-          <Ionicons name="ellipsis-vertical" size={24} color="#ffffff" />
-        </TouchableOpacity>
-      </View>
 
-      {/* Messages */}
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        renderItem={renderMessage}
-        keyExtractor={(item) => item.id.toString()}
-        style={styles.messagesList}
-        contentContainerStyle={styles.messagesContainer}
-        showsVerticalScrollIndicator={false}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-      />
-
-      {/* Input */}
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.textInput}
-          value={newMessage}
-          onChangeText={setNewMessage}
-          placeholder="Escribe un mensaje..."
-          placeholderTextColor="#666"
-          multiline
-          maxLength={500}
+        {/* Messages */}
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={renderMessage}
+          keyExtractor={(item) => item.id.toString()}
+          style={styles.messagesList}
+          contentContainerStyle={styles.messagesContainer}
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
         />
-        <TouchableOpacity
-          style={[
-            styles.sendButton,
-            (!newMessage.trim() || sending) && styles.sendButtonDisabled
-          ]}
-          onPress={sendMessage}
-          disabled={!newMessage.trim() || sending}
-        >
-          {sending ? (
-            <ActivityIndicator size="small" color="#1c1c1c" />
-          ) : (
-            <Ionicons name="send" size={20} color="#1c1c1c" />
-          )}
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+
+        {/* Input */}
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.textInput}
+            value={newMessage}
+            onChangeText={setNewMessage}
+            placeholder="Escribe un mensaje..."
+            placeholderTextColor="#666"
+            multiline
+            maxLength={500}
+            textAlignVertical="top"
+          />
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              (!newMessage.trim() || sending) && styles.sendButtonDisabled
+            ]}
+            onPress={sendMessage}
+            disabled={!newMessage.trim() || sending}
+          >
+            {sending ? (
+              <ActivityIndicator size="small" color="#1c1c1c" />
+            ) : (
+              <Ionicons name="send" size={20} color="#1c1c1c" />
+            )}
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#1c1c1c',
+  },
   container: {
     flex: 1,
     backgroundColor: '#1c1c1c',
@@ -378,17 +417,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#1c1c1c',
     borderTopWidth: 1,
     borderTopColor: '#2a2a2a',
+    minHeight: 70,
   },
   textInput: {
     flex: 1,
     backgroundColor: '#2a2a2a',
     borderRadius: 20,
     paddingHorizontal: 15,
-    paddingVertical: 10,
+    paddingVertical: 12,
     marginRight: 10,
     color: '#ffffff',
     fontSize: 16,
     maxHeight: 100,
+    minHeight: 40,
   },
   sendButton: {
     width: 40,

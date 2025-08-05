@@ -555,31 +555,40 @@ class ChatRoomListView(APIView):
             rooms = ChatRoom.objects.filter(
                 participants=request.user,
                 is_active=True
-            ).prefetch_related('participants', 'messages')
+            ).prefetch_related('participants', 'messages', 'messages__sender')
             
             rooms_data = []
             for room in rooms:
-                # Obtener último mensaje
-                last_message = room.messages.last()
+                # Obtener último mensaje con información del sender
+                last_message = room.messages.select_related('sender').last()
                 
                 # Obtener el otro participante (en chat privado)
                 other_participant = room.participants.exclude(id=request.user.id).first()
                 
-                rooms_data.append({
-                    'id': room.id,
-                    'name': room.name,
-                    'other_user': {
-                        'id': other_participant.id if other_participant else None,
-                        'name': other_participant.name if other_participant else None,
-                        'email': other_participant.email if other_participant else None,
-                    },
-                    'last_message': {
-                        'text': last_message.message if last_message else None,
-                        'timestamp': last_message.timestamp if last_message else None,
-                        'sender': last_message.sender.name if last_message else None,
-                    },
-                    'updated_at': room.updated_at,
-                })
+                # Solo incluir chats que tienen mensajes
+                if last_message:
+                    rooms_data.append({
+                        'id': room.id,
+                        'name': room.name,
+                        'other_user': {
+                            'id': other_participant.id if other_participant else None,
+                            'name': other_participant.name if other_participant else None,
+                            'email': other_participant.email if other_participant else None,
+                        },
+                        'last_message': {
+                            'text': last_message.message,
+                            'timestamp': last_message.timestamp,
+                            'sender': last_message.sender.name,
+                            'sender_id': last_message.sender.id,
+                        },
+                        'updated_at': room.updated_at,
+                        'unread_count': room.messages.filter(
+                            is_read=False
+                        ).exclude(sender=request.user).count(),
+                    })
+            
+            # Ordenar por fecha de actualización (más reciente primero)
+            rooms_data.sort(key=lambda x: x['updated_at'], reverse=True)
             
             return Response({
                 'success': True,
@@ -716,9 +725,19 @@ class SendMessageView(APIView):
                 message_type=request.data.get('message_type', 'text')
             )
             
-            # Actualizar timestamp de la sala
+            # Actualizar timestamp de la sala inmediatamente
             room.updated_at = timezone.now()
-            room.save()
+            room.save(update_fields=['updated_at'])
+            
+            # Crear notificación para el otro participante
+            other_participant = room.participants.exclude(id=request.user.id).first()
+            if other_participant:
+                Notification.objects.create(
+                    user=other_participant,
+                    type='message_received',
+                    title='Nuevo mensaje',
+                    message=f'{request.user.name} te envió un mensaje',
+                )
             
             return Response({
                 'success': True,
@@ -732,6 +751,42 @@ class SendMessageView(APIView):
                     'timestamp': message.timestamp,
                     'message_type': message.message_type,
                 }
+            })
+            
+        except ChatRoom.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': 'Sala de chat no encontrada'
+            }, status=404)
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=500)            
+
+class MarkMessagesAsReadView(APIView):
+    """Marcar mensajes como leídos en una sala de chat"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, room_id):
+        try:
+            room = ChatRoom.objects.get(
+                id=room_id,
+                participants=request.user,
+                is_active=True
+            )
+            
+            # Marcar todos los mensajes no leídos como leídos
+            unread_messages = ChatMessage.objects.filter(
+                room=room,
+                is_read=False
+            ).exclude(sender=request.user)
+            
+            unread_messages.update(is_read=True)
+            
+            return Response({
+                'success': True,
+                'message': f'{unread_messages.count()} mensajes marcados como leídos'
             })
             
         except ChatRoom.DoesNotExist:

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../providers/AuthProvider';
 import { apiRequest, showApiError } from '../../utils/api';
 import { router } from 'expo-router';
+import { useChatUpdate } from '../../hooks/useChatUpdate';
 
 interface ChatRoom {
   id: number;
@@ -26,8 +27,10 @@ interface ChatRoom {
     text: string | null;
     timestamp: string | null;
     sender: string | null;
+    sender_id: number | null;
   };
   updated_at: string;
+  unread_count: number;
 }
 
 export default function MessagesScreen() {
@@ -36,7 +39,7 @@ export default function MessagesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchChatRooms = async () => {
+  const fetchChatRooms = useCallback(async () => {
     try {
       const result = await apiRequest<{success: boolean, rooms: ChatRoom[]}>('/api/chat/rooms/', {
         headers: {
@@ -69,11 +72,17 @@ export default function MessagesScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.token]);
+
+  // Usar el hook de actualización automática
+  useChatUpdate({
+    onUpdate: fetchChatRooms,
+    interval: 3000, // Actualizar cada 3 segundos
+  });
 
   useEffect(() => {
     fetchChatRooms();
-  }, []);
+  }, [fetchChatRooms]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -107,6 +116,7 @@ export default function MessagesScreen() {
 
   const renderChatRoom = ({ item }: { item: ChatRoom }) => {
     const otherParticipant = getOtherParticipant(item);
+    const isOwnMessage = item.last_message?.sender_id?.toString() === user?.id;
     
     return (
       <TouchableOpacity
@@ -126,6 +136,13 @@ export default function MessagesScreen() {
           <View style={styles.avatarPlaceholder}>
             <Ionicons name="person" size={24} color="#666" />
           </View>
+          {item.unread_count > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadCount}>
+                {item.unread_count > 99 ? '99+' : item.unread_count}
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.chatInfo}>
@@ -141,8 +158,11 @@ export default function MessagesScreen() {
           </View>
 
           {item.last_message && item.last_message.text ? (
-            <Text style={styles.lastMessage} numberOfLines={1}>
-              {item.last_message.sender === user?.name ? 'Tú: ' : ''}
+            <Text style={[
+              styles.lastMessage,
+              !isOwnMessage && item.unread_count > 0 && styles.unreadMessage
+            ]} numberOfLines={1}>
+              {isOwnMessage ? 'Tú: ' : ''}
               {item.last_message.text}
             </Text>
           ) : (
@@ -302,6 +322,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  unreadBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#ff4757',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 5,
+  },
+  unreadCount: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
   chatInfo: {
     flex: 1,
   },
@@ -323,6 +360,10 @@ const styles = StyleSheet.create({
   lastMessage: {
     fontSize: 14,
     color: '#999',
+  },
+  unreadMessage: {
+    color: '#ffffff',
+    fontWeight: '600',
   },
   noMessages: {
     fontSize: 14,
