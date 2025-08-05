@@ -500,7 +500,13 @@ export default function ChatScreen() {
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
-    const isOwnMessage = item.sender.id === user?.id;
+    const isOwnMessage = Number(item.sender.id) === Number(user?.id);
+    
+    // Debug logs
+    console.log('Message sender ID:', item.sender.id, 'Type:', typeof item.sender.id);
+    console.log('Current user ID:', user?.id, 'Type:', typeof user?.id);
+    console.log('Is own message:', isOwnMessage);
+    console.log('Message:', item.message);
 
     return (
       <View style={[
