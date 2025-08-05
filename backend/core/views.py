@@ -12,7 +12,7 @@ from .models import User, ProfessionalDetail, Schedule, Appointment, Chat, Messa
 from .serializers import (
     UserSerializer, ProfessionalDetailSerializer, ProfessionalListSerializer, ScheduleSerializer,
     AppointmentSerializer, AppointmentCreateSerializer, ChatSerializer, MessageSerializer, 
-    ReviewSerializer, NotificationSerializer, CustomTokenObtainPairSerializer
+    ReviewSerializer, NotificationSerializer, CustomTokenObtainPairSerializer, ChatRoomSerializer, ChatMessageSerializer
 )
 import os
 import time
@@ -22,8 +22,6 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
-from .models import ChatRoom, ChatMessage, Notification, Professional
-from .serializers import ChatRoomSerializer, ChatMessageSerializer
 from supabase import create_client, Client
 
 

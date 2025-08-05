@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from .models import User, ProfessionalDetail, Schedule, Appointment, Chat, Message, Review, Notification
+from .models import User, ProfessionalDetail, Schedule, Appointment, Chat, Message, Review, Notification, ChatRoom, ChatMessage
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -65,12 +65,6 @@ class ChatSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class MessageSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Message
-        fields = '__all__'
-
-
 class ReviewSerializer(serializers.ModelSerializer):
     professional_name = serializers.CharField(source='professional.name', read_only=True)
     regular_name = serializers.CharField(source='regular.name', read_only=True)
@@ -105,6 +99,40 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data['name'] = self.user.name
         data['role'] = self.user.role
         return data
+
+class ChatRoomSerializer(serializers.ModelSerializer):
+    participants = UserSerializer(many=True, read_only=True)
+    last_message = serializers.SerializerMethodField()
+    unread_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = ChatRoom
+        fields = ['id', 'name', 'participants', 'last_message', 'unread_count', 'updated_at', 'is_active']
+    
+    def get_last_message(self, obj):
+        last_msg = obj.messages.order_by('-timestamp').first()
+        if last_msg:
+            return {
+                'text': last_msg.message,
+                'timestamp': last_msg.timestamp,
+                'sender': last_msg.sender.name,
+                'message_type': last_msg.message_type,
+            }
+        return None
+    
+    def get_unread_count(self, obj):
+        user = self.context['request'].user
+        return obj.messages.filter(is_read=False).exclude(sender=user).count()
+
+
+class ChatMessageSerializer(serializers.ModelSerializer):
+    sender = UserSerializer(read_only=True)
+    
+    class Meta:
+        model = ChatMessage
+        fields = ['id', 'room', 'sender', 'message', 'timestamp', 'is_read', 'message_type', 'audio_file', 'audio_duration']
+        read_only_fields = ['timestamp', 'is_read']
+
 
 class MessageSerializer(serializers.ModelSerializer):
     class Meta:
