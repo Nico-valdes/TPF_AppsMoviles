@@ -215,9 +215,23 @@ class ChatMessage(models.Model):
         choices=[
             ('text', 'Text'),
             ('image', 'Image'),
+            ('audio', 'Audio'),
             ('file', 'File'),
         ],
         default='text'
+    )
+    
+    # Campos específicos para audio
+    audio_file = models.URLField(
+        max_length=500,
+        null=True, 
+        blank=True,
+        help_text='URL del archivo de audio (Cloudinary/S3)'
+    )
+    audio_duration = models.FloatField(
+        null=True, 
+        blank=True,
+        help_text='Duración del audio en segundos'
     )
     
     class Meta:

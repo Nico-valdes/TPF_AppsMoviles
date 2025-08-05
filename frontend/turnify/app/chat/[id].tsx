@@ -17,6 +17,8 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { useAuth } from '../../providers/AuthProvider';
 import { apiRequest, showApiError } from '../../utils/api';
 import { useChatUpdate } from '../../hooks/useChatUpdate';
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 
 interface Message {
   id: number;
@@ -27,6 +29,8 @@ interface Message {
   };
   timestamp: string;
   message_type: string;
+  audio_file?: string;
+  audio_duration?: number;
 }
 
 interface ChatRoom {
@@ -58,6 +62,14 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+
+  // Audio recording state
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [playingAudio, setPlayingAudio] = useState<number | null>(null);
+  const [audioPlayer, setAudioPlayer] = useState<Audio.Sound | null>(null);
+  const recordingInterval = useRef<number | null>(null);
 
   const fetchMessages = useCallback(async () => {
     try {
@@ -134,12 +146,24 @@ export default function ChatScreen() {
     }
   }, [id, fetchChatRoom, fetchMessages]);
 
+  // Cleanup audio resources on unmount
+  useEffect(() => {
+    return () => {
+      if (audioPlayer) {
+        audioPlayer.unloadAsync();
+      }
+      if (recordingInterval.current) {
+        clearInterval(recordingInterval.current);
+      }
+    };
+  }, [audioPlayer]);
+
   const sendMessage = async () => {
     if (!newMessage.trim() || sending) return;
 
     setSending(true);
     try {
-      const result = await apiRequest(`/api/chat/${id}/send/`, {
+      const result = await apiRequest<{success: boolean, message: Message}>(`/api/chat/${id}/send/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${user?.token}`,
@@ -147,7 +171,6 @@ export default function ChatScreen() {
         },
         body: JSON.stringify({
           message: newMessage.trim(),
-          message_type: 'text',
         }),
       });
 
@@ -156,24 +179,149 @@ export default function ChatScreen() {
         return;
       }
 
-      // Agregar el nuevo mensaje a la lista inmediatamente
-      if (result.data && typeof result.data === 'object' && 'message' in result.data) {
-        setMessages(prev => [...prev, (result.data as any).message as Message]);
-      }
-
       setNewMessage('');
-      
-      // Forzar actualización de mensajes después de enviar
       setTimeout(() => {
         fetchMessages();
-      }, 500);
-      
+      }, 100);
     } catch (error) {
       console.error('Error sending message:', error);
-      Alert.alert('Error', 'No se pudo enviar el mensaje');
     } finally {
       setSending(false);
     }
+  };
+
+  // Audio recording functions
+  const startRecording = async () => {
+    try {
+      // Request permissions
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permisos requeridos', 'Necesitamos permisos de micrófono para grabar audio');
+        return;
+      }
+
+      // Configure audio mode
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      // Start recording
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      
+      setRecording(recording);
+      setIsRecording(true);
+      setRecordingDuration(0);
+
+      // Start duration timer
+      recordingInterval.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      Alert.alert('Error', 'No se pudo iniciar la grabación');
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!recording) return;
+
+    try {
+      setIsRecording(false);
+      if (recordingInterval.current) {
+        clearInterval(recordingInterval.current);
+        recordingInterval.current = null;
+      }
+
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      setRecording(null);
+
+      if (uri && recordingDuration > 0) {
+        await sendAudioMessage(uri, recordingDuration);
+      }
+
+      setRecordingDuration(0);
+    } catch (error) {
+      console.error('Error stopping recording:', error);
+      Alert.alert('Error', 'No se pudo detener la grabación');
+    }
+  };
+
+  const sendAudioMessage = async (audioUri: string, duration: number) => {
+    try {
+      setSending(true);
+
+      // Create form data
+      const formData = new FormData();
+      formData.append('audio', {
+        uri: audioUri,
+        type: 'audio/m4a',
+        name: 'audio.m4a',
+      } as any);
+      formData.append('duration', duration.toString());
+
+      const result = await apiRequest<{success: boolean, message: Message}>(`/api/chat/${id}/send-audio/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${user?.token}`,
+          'Content-Type': 'multipart/form-data',
+        },
+        body: formData,
+      });
+
+      if (result.error) {
+        showApiError(result.error, 'Error al enviar audio');
+        return;
+      }
+
+      setTimeout(() => {
+        fetchMessages();
+      }, 100);
+    } catch (error) {
+      console.error('Error sending audio:', error);
+      Alert.alert('Error', 'No se pudo enviar el audio');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const playAudio = async (audioUrl: string, messageId: number) => {
+    try {
+      // Stop any currently playing audio
+      if (audioPlayer) {
+        await audioPlayer.unloadAsync();
+      }
+
+      setPlayingAudio(messageId);
+      const { sound } = await Audio.Sound.createAsync({ uri: audioUrl });
+      setAudioPlayer(sound);
+
+      await sound.playAsync();
+
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setPlayingAudio(null);
+          setAudioPlayer(null);
+        }
+      });
+    } catch (error) {
+      console.error('Error playing audio:', error);
+      Alert.alert('Error', 'No se pudo reproducir el audio');
+      setPlayingAudio(null);
+    }
+  };
+
+  const stopAudio = async () => {
+    if (audioPlayer) {
+      await audioPlayer.stopAsync();
+      await audioPlayer.unloadAsync();
+      setAudioPlayer(null);
+    }
+    setPlayingAudio(null);
   };
 
   const getOtherParticipant = () => {
@@ -190,18 +338,8 @@ export default function ChatScreen() {
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
-    const isOwnMessage = item.sender.id.toString() === user?.id;
-    
-    console.log('Message debug:', {
-      messageId: item.id,
-      senderId: item.sender.id,
-      senderName: item.sender.name,
-      userId: user?.id,
-      userName: user?.name,
-      isOwnMessage: isOwnMessage,
-      message: item.message
-    });
-    
+    const isOwnMessage = item.sender.id === user?.id;
+
     return (
       <View style={[
         styles.messageContainer,
@@ -211,12 +349,49 @@ export default function ChatScreen() {
           styles.messageBubble,
           isOwnMessage ? styles.ownBubble : styles.otherBubble
         ]}>
-          <Text style={[
-            styles.messageText,
-            isOwnMessage ? styles.ownMessageText : styles.otherMessageText
-          ]}>
-            {item.message}
-          </Text>
+          {item.message_type === 'audio' && item.audio_file ? (
+            <View style={styles.audioContainer}>
+                             <TouchableOpacity
+                 style={styles.audioMessageButton}
+                 onPress={() => {
+                  if (playingAudio === item.id) {
+                    stopAudio();
+                  } else {
+                    playAudio(item.audio_file!, item.id);
+                  }
+                }}
+              >
+                <Ionicons 
+                  name={playingAudio === item.id ? "pause" : "play"} 
+                  size={24} 
+                  color={isOwnMessage ? "#1c1c1c" : "#ffffff"} 
+                />
+              </TouchableOpacity>
+              <View style={styles.audioInfo}>
+                <Text style={[
+                  styles.audioText,
+                  isOwnMessage ? styles.ownMessageText : styles.otherMessageText
+                ]}>
+                  {playingAudio === item.id ? "Reproduciendo..." : "Audio"}
+                </Text>
+                {item.audio_duration && (
+                  <Text style={[
+                    styles.audioDuration,
+                    isOwnMessage ? styles.ownMessageTime : styles.otherMessageTime
+                  ]}>
+                    {Math.floor(item.audio_duration)}s
+                  </Text>
+                )}
+              </View>
+            </View>
+          ) : (
+            <Text style={[
+              styles.messageText,
+              isOwnMessage ? styles.ownMessageText : styles.otherMessageText
+            ]}>
+              {item.message}
+            </Text>
+          )}
           <Text style={[
             styles.messageTime,
             isOwnMessage ? styles.ownMessageTime : styles.otherMessageTime
@@ -282,30 +457,58 @@ export default function ChatScreen() {
 
         {/* Input */}
         <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.textInput}
-            value={newMessage}
-            onChangeText={setNewMessage}
-            placeholder="Escribe un mensaje..."
-            placeholderTextColor="#666"
-            multiline
-            maxLength={500}
-            textAlignVertical="top"
-          />
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              (!newMessage.trim() || sending) && styles.sendButtonDisabled
-            ]}
-            onPress={sendMessage}
-            disabled={!newMessage.trim() || sending}
-          >
-            {sending ? (
-              <ActivityIndicator size="small" color="#1c1c1c" />
-            ) : (
-              <Ionicons name="send" size={20} color="#1c1c1c" />
-            )}
-          </TouchableOpacity>
+          {isRecording ? (
+            <View style={styles.recordingContainer}>
+              <View style={styles.recordingIndicator}>
+                <Ionicons name="mic" size={20} color="#ff4444" />
+                <Text style={styles.recordingText}>
+                  Grabando... {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.stopRecordingButton}
+                onPress={stopRecording}
+              >
+                <Ionicons name="stop" size={20} color="#ffffff" />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={styles.audioButton}
+                onPress={startRecording}
+                disabled={sending}
+              >
+                <Ionicons name="mic" size={24} color="#34eb89" />
+              </TouchableOpacity>
+              
+              <TextInput
+                style={styles.textInput}
+                value={newMessage}
+                onChangeText={setNewMessage}
+                placeholder="Escribe un mensaje..."
+                placeholderTextColor="#666"
+                multiline
+                maxLength={500}
+                textAlignVertical="top"
+              />
+              
+              <TouchableOpacity
+                style={[
+                  styles.sendButton,
+                  (!newMessage.trim() || sending) && styles.sendButtonDisabled
+                ]}
+                onPress={sendMessage}
+                disabled={!newMessage.trim() || sending}
+              >
+                {sending ? (
+                  <ActivityIndicator size="small" color="#1c1c1c" />
+                ) : (
+                  <Ionicons name="send" size={20} color="#1c1c1c" />
+                )}
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -419,6 +622,17 @@ const styles = StyleSheet.create({
     borderTopColor: '#2a2a2a',
     minHeight: 70,
   },
+  audioButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#34eb89',
+  },
   textInput: {
     flex: 1,
     backgroundColor: '#2a2a2a',
@@ -441,5 +655,47 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: '#666',
+  },
+  audioContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  audioMessageButton: {
+    marginRight: 10,
+  },
+  audioInfo: {
+    flex: 1,
+  },
+  audioText: {
+    fontSize: 14,
+    color: '#999',
+  },
+  audioDuration: {
+    fontSize: 12,
+    color: '#999',
+  },
+  recordingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2a2a2a',
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    flex: 1,
+    marginRight: 10,
+  },
+  recordingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  recordingText: {
+    fontSize: 14,
+    color: '#ffffff',
+    marginLeft: 5,
+  },
+  stopRecordingButton: {
+    marginLeft: 10,
   },
 }); 

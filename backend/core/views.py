@@ -14,6 +14,17 @@ from .serializers import (
     AppointmentSerializer, AppointmentCreateSerializer, ChatSerializer, MessageSerializer, 
     ReviewSerializer, NotificationSerializer, CustomTokenObtainPairSerializer
 )
+import os
+import time
+from django.utils import timezone
+from django.db import transaction
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+from .models import ChatRoom, ChatMessage, Notification, Professional
+from .serializers import ChatRoomSerializer, ChatMessageSerializer
+from supabase import create_client, Client
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -63,8 +74,6 @@ class CurrentUserView(APIView):
             # Verificar que el archivo no esté vacío
             if uploaded_file.size > 0:
                 # Guardar la imagen en media/profile_images/
-                import os
-                from django.conf import settings
                 
                 # Crear el directorio si no existe
                 media_dir = os.path.join(settings.MEDIA_ROOT, 'profile_images')
@@ -799,3 +808,94 @@ class MarkMessagesAsReadView(APIView):
                 'success': False,
                 'error': str(e)
             }, status=500)            
+
+class SendAudioMessageView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, room_id):
+        try:
+            room = ChatRoom.objects.get(
+                id=room_id,
+                participants=request.user,
+                is_active=True
+            )
+            audio_file = request.FILES.get('audio')
+            duration = request.data.get('duration', 0)
+            
+            if not audio_file:
+                return Response({'success': False, 'error': 'No se proporcionó archivo de audio'}, status=400)
+            
+            allowed_types = ['audio/m4a', 'audio/mp3', 'audio/wav', 'audio/aac']
+            if audio_file.content_type not in allowed_types:
+                return Response({'success': False, 'error': 'Tipo de archivo no permitido'}, status=400)
+            
+            if audio_file.size > 15 * 1024 * 1024:
+                return Response({'success': False, 'error': 'Archivo demasiado grande (máximo 15MB)'}, status=400)
+            
+            # Configurar Supabase
+            supabase_url = os.environ.get('SUPABASE_URL')
+            supabase_key = os.environ.get('SUPABASE_KEY')
+            
+            if not supabase_url or not supabase_key:
+                return Response({'success': False, 'error': 'Configuración de Supabase no encontrada'}, status=500)
+            
+            try:
+                supabase: Client = create_client(supabase_url, supabase_key)
+                
+                # Generar nombre único para el archivo
+                file_extension = audio_file.name.split('.')[-1]
+                file_name = f"audio_{room_id}_{request.user.id}_{int(time.time())}.{file_extension}"
+                
+                # Subir archivo a Supabase Storage
+                upload_result = supabase.storage.from_('chat-audios').upload(
+                    path=file_name,
+                    file=audio_file.read(),
+                    file_options={"content-type": audio_file.content_type}
+                )
+                
+                # Obtener URL pública del archivo
+                audio_url = supabase.storage.from_('chat-audios').get_public_url(file_name)
+                
+            except Exception as e:
+                return Response({'success': False, 'error': f'Error al subir audio: {str(e)}'}, status=500)
+            
+            message = ChatMessage.objects.create(
+                room=room,
+                sender=request.user,
+                message_type='audio',
+                message=f"Audio de {request.user.name}",
+                audio_file=audio_url,
+                audio_duration=float(duration) if duration else None,
+            )
+            
+            room.updated_at = timezone.now()
+            room.save(update_fields=['updated_at'])
+            
+            other_participant = room.participants.exclude(id=request.user.id).first()
+            if other_participant:
+                Notification.objects.create(
+                    user=other_participant,
+                    type='message_received',
+                    title='Nuevo mensaje de audio',
+                    message=f'{request.user.name} te envió un mensaje de audio',
+                )
+            
+            return Response({
+                'success': True,
+                'message': {
+                    'id': message.id,
+                    'message': message.message,
+                    'audio_file': message.audio_file,
+                    'audio_duration': message.audio_duration,
+                    'timestamp': message.timestamp,
+                    'message_type': message.message_type,
+                    'sender': {
+                        'id': message.sender.id,
+                        'name': message.sender.name,
+                    }
+                }
+            })
+        except ChatRoom.DoesNotExist:
+            return Response({'success': False, 'error': 'Sala de chat no encontrada'}, status=404)
+        except Exception as e:
+            return Response({'success': False, 'error': str(e)}, status=500)            
