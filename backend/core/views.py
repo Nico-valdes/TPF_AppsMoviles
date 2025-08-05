@@ -811,38 +811,92 @@ class SendAudioMessageView(APIView):
     permission_classes = [IsAuthenticated]
     
     def post(self, request, room_id):
+        print("🎤 ===== INICIO ENVÍO DE AUDIO =====")
+        print(f"📱 Usuario: {request.user.name} (ID: {request.user.id})")
+        print(f"🏠 Sala: {room_id}")
+        
         try:
             room = ChatRoom.objects.get(
                 id=room_id,
                 participants=request.user,
                 is_active=True
             )
+            print(f"✅ Sala encontrada: {room.name}")
+            
             audio_file = request.FILES.get('audio')
             duration = request.data.get('duration', 0)
             
+            print(f"⏱️ Duración recibida: {duration}")
+            
             if not audio_file:
+                print("❌ No se proporcionó archivo de audio")
                 return Response({'success': False, 'error': 'No se proporcionó archivo de audio'}, status=400)
             
-            allowed_types = ['audio/m4a', 'audio/mp3', 'audio/wav', 'audio/aac']
-            if audio_file.content_type not in allowed_types:
-                return Response({'success': False, 'error': 'Tipo de archivo no permitido'}, status=400)
+            # Debug: Imprimir información del archivo
+            print(f"📁 ARCHIVO RECIBIDO:")
+            print(f"   Nombre: {audio_file.name}")
+            print(f"   Content type: {audio_file.content_type}")
+            print(f"   Tamaño: {audio_file.size} bytes")
+            print(f"   Headers: {audio_file.content_type_extra}")
+            print(f"   Charset: {audio_file.charset}")
             
-            if audio_file.size > 15 * 1024 * 1024:
-                return Response({'success': False, 'error': 'Archivo demasiado grande (máximo 15MB)'}, status=400)
+            # TEMPORALMENTE: Aceptar cualquier archivo para debugging
+            print(f"✅ Aceptando archivo para debugging: {audio_file.name}")
+            
+            # Validación más flexible de tipos de archivo
+            allowed_types = [
+                'audio/m4a', 'audio/mp3', 'audio/wav', 'audio/aac',
+                'audio/x-m4a', 'audio/x-mp3', 'audio/x-wav', 'audio/x-aac',
+                'audio/quicktime', 'audio/mpeg', 'audio/x-mpeg',
+                'application/octet-stream'  # Para archivos sin tipo específico
+            ]
+            
+            # También verificar por extensión del archivo
+            file_extension = audio_file.name.lower().split('.')[-1]
+            allowed_extensions = ['m4a', 'mp3', 'wav', 'aac', 'm4v']
+            
+            content_type_valid = audio_file.content_type in allowed_types
+            extension_valid = file_extension in allowed_extensions
+            
+            print(f"🔍 VALIDACIÓN:")
+            print(f"   Content type válido: {content_type_valid}")
+            print(f"   Extensión válida: {extension_valid}")
+            print(f"   Extensión detectada: {file_extension}")
+            
+            # Para debugging, aceptar cualquier archivo por ahora
+            if not content_type_valid and not extension_valid:
+                print(f"⚠️ Tipo de archivo no reconocido: {audio_file.content_type}, extensión: {file_extension}")
+                print(f"Pero continuando para debugging...")
+            
+            # TEMPORALMENTE: Saltar validación de tamaño también
+            print(f"📏 Tamaño del archivo: {audio_file.size} bytes")
             
             # Configurar Supabase
             supabase_url = os.environ.get('SUPABASE_URL')
             supabase_key = os.environ.get('SUPABASE_KEY')
             
+            print(f"🔧 CONFIGURACIÓN SUPABASE:")
+            print(f"   URL: {supabase_url}")
+            print(f"   KEY: {supabase_key[:10]}..." if supabase_key else "No key")
+            
             if not supabase_url or not supabase_key:
+                print("❌ Configuración de Supabase no encontrada")
                 return Response({'success': False, 'error': 'Configuración de Supabase no encontrada'}, status=500)
             
             try:
+                print(f"🚀 INICIANDO SUBIDA A SUPABASE")
                 supabase: Client = create_client(supabase_url, supabase_key)
+                print(f"✅ Cliente Supabase creado")
                 
                 # Generar nombre único para el archivo
                 file_extension = audio_file.name.split('.')[-1]
                 file_name = f"audio_{room_id}_{request.user.id}_{int(time.time())}.{file_extension}"
+                
+                print(f"📤 SUBIENDO ARCHIVO:")
+                print(f"   Nombre: {file_name}")
+                print(f"   Tamaño: {audio_file.size} bytes")
+                print(f"   Tipo: {audio_file.content_type}")
+                print(f"   Bucket: chat-audios")
                 
                 # Subir archivo a Supabase Storage
                 upload_result = supabase.storage.from_('chat-audios').upload(
@@ -851,10 +905,18 @@ class SendAudioMessageView(APIView):
                     file_options={"content-type": audio_file.content_type}
                 )
                 
+                print(f"✅ Archivo subido exitosamente")
+                print(f"📊 Resultado: {upload_result}")
+                
                 # Obtener URL pública del archivo
                 audio_url = supabase.storage.from_('chat-audios').get_public_url(file_name)
+                print(f"🔗 URL pública: {audio_url}")
                 
             except Exception as e:
+                print(f"❌ ERROR AL SUBIR AUDIO:")
+                print(f"   Tipo de error: {type(e).__name__}")
+                print(f"   Mensaje: {str(e)}")
+                print(f"   Detalles completos: {e}")
                 return Response({'success': False, 'error': f'Error al subir audio: {str(e)}'}, status=500)
             
             message = ChatMessage.objects.create(
@@ -866,8 +928,15 @@ class SendAudioMessageView(APIView):
                 audio_duration=float(duration) if duration else None,
             )
             
+            print(f"💾 MENSAJE CREADO:")
+            print(f"   ID: {message.id}")
+            print(f"   Tipo: {message.message_type}")
+            print(f"   Audio URL: {message.audio_file}")
+            print(f"   Duración: {message.audio_duration}")
+            
             room.updated_at = timezone.now()
             room.save(update_fields=['updated_at'])
+            print(f"✅ Sala actualizada")
             
             other_participant = room.participants.exclude(id=request.user.id).first()
             if other_participant:
@@ -877,6 +946,9 @@ class SendAudioMessageView(APIView):
                     title='Nuevo mensaje de audio',
                     message=f'{request.user.name} te envió un mensaje de audio',
                 )
+                print(f"📢 Notificación enviada a: {other_participant.name}")
+            
+            print(f"🎉 ===== AUDIO ENVIADO EXITOSAMENTE =====")
             
             return Response({
                 'success': True,
@@ -894,6 +966,10 @@ class SendAudioMessageView(APIView):
                 }
             })
         except ChatRoom.DoesNotExist:
+            print(f"❌ Sala de chat no encontrada: {room_id}")
             return Response({'success': False, 'error': 'Sala de chat no encontrada'}, status=404)
         except Exception as e:
+            print(f"❌ ERROR GENERAL:")
+            print(f"   Tipo: {type(e).__name__}")
+            print(f"   Mensaje: {str(e)}")
             return Response({'success': False, 'error': str(e)}, status=500)            

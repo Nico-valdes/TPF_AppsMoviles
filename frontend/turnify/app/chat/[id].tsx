@@ -255,12 +255,34 @@ export default function ChatScreen() {
     try {
       setSending(true);
 
+      // Detectar el tipo de archivo basado en la URI
+      let audioType = 'audio/m4a'; // default
+      let fileName = 'audio.m4a';
+      
+      if (audioUri.includes('.mp3')) {
+        audioType = 'audio/mp3';
+        fileName = 'audio.mp3';
+      } else if (audioUri.includes('.wav')) {
+        audioType = 'audio/wav';
+        fileName = 'audio.wav';
+      } else if (audioUri.includes('.aac')) {
+        audioType = 'audio/aac';
+        fileName = 'audio.aac';
+      }
+
+      console.log('Enviando audio:', {
+        uri: audioUri,
+        type: audioType,
+        name: fileName,
+        duration: duration
+      });
+
       // Create form data
       const formData = new FormData();
       formData.append('audio', {
         uri: audioUri,
-        type: 'audio/m4a',
-        name: 'audio.m4a',
+        type: audioType,
+        name: fileName,
       } as any);
       formData.append('duration', duration.toString());
 
