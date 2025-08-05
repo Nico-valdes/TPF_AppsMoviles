@@ -138,6 +138,28 @@ SIMPLE_JWT = {
 CORS_ALLOW_ALL_ORIGINS = True  # Solo para desarrollo
 CORS_ALLOW_CREDENTIALS = True
 
+# Configuración adicional de CORS para desarrollo
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
 # Authentication Backend
 AUTHENTICATION_BACKENDS = [
     'core.backends.CustomUserBackend',
@@ -250,4 +272,5 @@ else:
 
 # Supabase Configuration
 SUPABASE_URL = config('SUPABASE_URL', default='')
-SUPABASE_KEY = config('SUPABASE_KEY', default='')
+SUPABASE_KEY = config('SUPABASE_KEY', default='')  # Anon key para frontend
+SUPABASE_SERVICE_KEY = config('SUPABASE_SERVICE_KEY', default='')  # Service key para backend

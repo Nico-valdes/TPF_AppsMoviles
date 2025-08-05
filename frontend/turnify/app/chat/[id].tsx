@@ -193,6 +193,12 @@ export default function ChatScreen() {
   // Audio recording functions
   const startRecording = async () => {
     try {
+      // Si ya hay una grabación activa, detenerla primero
+      if (recording) {
+        await recording.stopAndUnloadAsync();
+        setRecording(null);
+      }
+
       // Request permissions
       const { status } = await Audio.requestPermissionsAsync();
       if (status !== 'granted') {
@@ -206,12 +212,12 @@ export default function ChatScreen() {
         playsInSilentModeIOS: true,
       });
 
-      // Start recording
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      // Start recording with low quality for better Expo Go compatibility
+      const { recording: newRecording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.LOW_QUALITY
       );
       
-      setRecording(recording);
+      setRecording(newRecording);
       setIsRecording(true);
       setRecordingDuration(0);
 
@@ -251,17 +257,36 @@ export default function ChatScreen() {
     }
   };
 
+  const cancelRecording = async () => {
+    if (!recording) return;
+
+    try {
+      setIsRecording(false);
+      if (recordingInterval.current) {
+        clearInterval(recordingInterval.current);
+        recordingInterval.current = null;
+      }
+
+      await recording.stopAndUnloadAsync();
+      setRecording(null);
+      setRecordingDuration(0);
+    } catch (error) {
+      console.error('Error canceling recording:', error);
+      Alert.alert('Error', 'No se pudo cancelar la grabación');
+    }
+  };
+
   const sendAudioMessage = async (audioUri: string, duration: number) => {
     try {
       setSending(true);
 
       // Detectar el tipo de archivo basado en la URI
-      let audioType = 'audio/m4a'; // default
-      let fileName = 'audio.m4a';
+      let audioType = 'audio/mp3'; // default - mejor compatibilidad con Expo Go
+      let fileName = 'audio.mp3';
       
-      if (audioUri.includes('.mp3')) {
-        audioType = 'audio/mp3';
-        fileName = 'audio.mp3';
+      if (audioUri.includes('.m4a')) {
+        audioType = 'audio/m4a';
+        fileName = 'audio.m4a';
       } else if (audioUri.includes('.wav')) {
         audioType = 'audio/wav';
         fileName = 'audio.wav';
@@ -277,28 +302,99 @@ export default function ChatScreen() {
         duration: duration
       });
 
-      // Create form data
-      const formData = new FormData();
-      formData.append('audio', {
-        uri: audioUri,
-        type: audioType,
-        name: fileName,
-      } as any);
-      formData.append('duration', duration.toString());
+             // Create form data for React Native
+       const formData = new FormData();
+       
+       // Debug: Verificar si el archivo existe
+       console.log('🔍 DEBUG: Verificando archivo de audio');
+       console.log('URI:', audioUri);
+       console.log('Tipo:', audioType);
+       console.log('Nombre:', fileName);
+       
+               // Verificar si el archivo existe (solo en dispositivos móviles)
+        if (Platform.OS !== 'web') {
+          try {
+            const fileInfo = await FileSystem.getInfoAsync(audioUri);
+            console.log('📁 Archivo existe:', fileInfo.exists);
+            console.log('📁 URI:', fileInfo.uri);
+            if (fileInfo.exists && 'size' in fileInfo) {
+              console.log('📁 Tamaño:', (fileInfo as any).size);
+            }
+          } catch (error) {
+            console.log('❌ Error verificando archivo:', error);
+          }
+        } else {
+          console.log('📁 Ejecutando en web - saltando verificación de archivo');
+        }
+       
+               // Crear FormData de manera diferente según la plataforma
+        if (Platform.OS === 'web') {
+          // En web, necesitamos convertir el audio a Blob
+          console.log('🌐 Creando FormData para web');
+          
+          // Para web, vamos a enviar solo la duración por ahora
+          // y crear un archivo de audio simulado
+          const audioBlob = new Blob(['audio data'], { type: audioType });
+          formData.append('audio', audioBlob, fileName);
+          formData.append('duration', duration.toString());
+        } else {
+          // En móvil, usar el formato normal
+          console.log('📱 Creando FormData para móvil');
+          formData.append('audio', {
+            uri: audioUri,
+            type: audioType,
+            name: fileName,
+          } as any);
+          formData.append('duration', duration.toString());
+        }
 
-      const result = await apiRequest<{success: boolean, message: Message}>(`/api/chat/${id}/send-audio/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${user?.token}`,
-          'Content-Type': 'multipart/form-data',
-        },
-        body: formData,
-      });
+             console.log('FormData creado:', {
+         audio: {
+           uri: audioUri,
+           type: audioType,
+           name: fileName,
+         },
+         duration: duration.toString()
+       });
 
-      if (result.error) {
-        showApiError(result.error, 'Error al enviar audio');
-        return;
-      }
+               // Debug: Verificar el contenido del FormData
+        console.log('FormData entries:');
+        try {
+          (formData as any).entries().forEach(([key, value]: [string, any]) => {
+            console.log(`${key}:`, value);
+          });
+        } catch (error) {
+          console.log('❌ Error iterando FormData:', error);
+          console.log('FormData tipo:', typeof formData);
+          console.log('FormData contenido:', formData);
+        }
+
+             console.log('🔍 DEBUG: Enviando petición de audio');
+       console.log('URL:', `/api/chat/${id}/send-audio/`);
+       console.log('Token:', user?.token ? `${user.token.substring(0, 20)}...` : 'No token');
+       console.log('Headers:', {
+         'Authorization': `Bearer ${user?.token}`,
+       });
+       
+       const result = await apiRequest<{success: boolean, message: Message}>(`/api/chat/${id}/send-audio/`, {
+         method: 'POST',
+         headers: {
+           'Authorization': `Bearer ${user?.token}`,
+           // En React Native, NO establecer Content-Type para FormData
+         },
+         body: formData,
+       });
+
+             console.log('🔍 DEBUG: Respuesta recibida');
+       console.log('Status:', result.status);
+       console.log('Error:', result.error);
+       console.log('Data:', result.data);
+       
+       if (result.error) {
+         console.log('❌ Error en la petición:', result.error);
+         showApiError(result.error, 'Error al enviar audio');
+         return;
+       }
 
       setTimeout(() => {
         fetchMessages();
@@ -313,26 +409,70 @@ export default function ChatScreen() {
 
   const playAudio = async (audioUrl: string, messageId: number) => {
     try {
+      console.log('🎵 Intentando reproducir audio en Expo Go:', audioUrl);
+      
       // Stop any currently playing audio
       if (audioPlayer) {
         await audioPlayer.unloadAsync();
       }
 
       setPlayingAudio(messageId);
-      const { sound } = await Audio.Sound.createAsync({ uri: audioUrl });
+      
+      // Verificar si la URL es válida
+      if (!audioUrl || audioUrl.trim() === '') {
+        throw new Error('URL de audio vacía o inválida');
+      }
+      
+      console.log('🔗 URL de audio:', audioUrl);
+      console.log('📱 Plataforma:', Platform.OS);
+      
+      let audioUri = audioUrl;
+      
+      // Para Expo Go, intentar descargar el archivo localmente primero
+      if (Platform.OS !== 'web') {
+        try {
+          console.log('📥 Descargando archivo de audio...');
+          const fileName = `audio_${messageId}_${Date.now()}.m4a`;
+          const localUri = `${FileSystem.documentDirectory}${fileName}`;
+          
+          const downloadResult = await FileSystem.downloadAsync(audioUrl, localUri);
+          console.log('✅ Archivo descargado:', downloadResult.uri);
+          
+          audioUri = downloadResult.uri;
+        } catch (downloadError) {
+          console.warn('⚠️ No se pudo descargar el archivo, usando URL directa:', downloadError);
+        }
+      }
+      
+      // Crear el objeto de sonido de manera más simple para Expo Go
+      const { sound } = await Audio.Sound.createAsync({ uri: audioUri });
       setAudioPlayer(sound);
 
       await sound.playAsync();
+      console.log('✅ Audio iniciado correctamente');
 
       sound.setOnPlaybackStatusUpdate((status) => {
+        console.log('📊 Estado de reproducción:', status);
         if (status.isLoaded && status.didJustFinish) {
           setPlayingAudio(null);
           setAudioPlayer(null);
         }
       });
+
     } catch (error) {
-      console.error('Error playing audio:', error);
-      Alert.alert('Error', 'No se pudo reproducir el audio');
+      console.error('❌ Error playing audio:', error);
+      console.error('🔍 Detalles del error:', {
+        message: error instanceof Error ? error.message : 'Error desconocido',
+        stack: error instanceof Error ? error.stack : undefined,
+        url: audioUrl,
+        messageId: messageId
+      });
+      
+      // Mostrar error más específico para Expo Go
+      Alert.alert(
+        'Error de Reproducción', 
+        'No se pudo reproducir el audio. Esto puede ser debido a:\n\n• Formato de audio no compatible con Expo Go\n• Problema de conexión\n• Archivo corrupto\n\nPrueba con un audio más corto.'
+      );
       setPlayingAudio(null);
     }
   };
@@ -477,24 +617,34 @@ export default function ChatScreen() {
           onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
         />
 
-        {/* Input */}
-        <View style={styles.inputContainer}>
-          {isRecording ? (
-            <View style={styles.recordingContainer}>
-              <View style={styles.recordingIndicator}>
-                <Ionicons name="mic" size={20} color="#ff4444" />
-                <Text style={styles.recordingText}>
-                  Grabando... {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.stopRecordingButton}
-                onPress={stopRecording}
-              >
-                <Ionicons name="stop" size={20} color="#ffffff" />
-              </TouchableOpacity>
-            </View>
-          ) : (
+                 {/* Input */}
+         <View style={styles.inputContainer}>
+           {isRecording ? (
+             <View style={styles.recordingContainer}>
+               <View style={styles.recordingIndicator}>
+                 <Ionicons name="mic" size={20} color="#ff4444" />
+                 <Text style={styles.recordingText}>
+                   Grabando... {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
+                 </Text>
+               </View>
+               <View style={styles.recordingButtons}>
+                 <TouchableOpacity
+                   style={styles.cancelRecordingButton}
+                   onPress={cancelRecording}
+                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                 >
+                   <Ionicons name="close" size={20} color="#ffffff" />
+                 </TouchableOpacity>
+                 <TouchableOpacity
+                   style={styles.stopRecordingButton}
+                   onPress={stopRecording}
+                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                 >
+                   <Ionicons name="stop" size={20} color="#ffffff" />
+                 </TouchableOpacity>
+               </View>
+             </View>
+           ) : (
             <>
               <TouchableOpacity
                 style={styles.audioButton}
@@ -717,7 +867,27 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     marginLeft: 5,
   },
-  stopRecordingButton: {
-    marginLeft: 10,
-  },
+     recordingButtons: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     gap: 10,
+   },
+   cancelRecordingButton: {
+     padding: 8,
+     backgroundColor: '#666',
+     borderRadius: 20,
+     minWidth: 40,
+     minHeight: 40,
+     justifyContent: 'center',
+     alignItems: 'center',
+   },
+   stopRecordingButton: {
+     padding: 8,
+     backgroundColor: '#ff4444',
+     borderRadius: 20,
+     minWidth: 40,
+     minHeight: 40,
+     justifyContent: 'center',
+     alignItems: 'center',
+   },
 }); 

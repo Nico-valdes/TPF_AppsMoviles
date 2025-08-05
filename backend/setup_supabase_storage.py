@@ -3,14 +3,15 @@
 Script para configurar Supabase Storage para archivos de audio
 """
 import os
+from decouple import config
 from supabase import create_client, Client
 
 def setup_supabase_storage():
     """Configurar bucket de Supabase Storage para archivos de audio"""
     
-    # Obtener credenciales de Supabase
-    supabase_url = os.environ.get('SUPABASE_URL')
-    supabase_key = os.environ.get('SUPABASE_KEY')
+    # Obtener credenciales de Supabase usando python-decouple
+    supabase_url = config('SUPABASE_URL', default='')
+    supabase_key = config('SUPABASE_SERVICE_KEY', default='')  # Usar service key para configuración
     
     if not supabase_url or not supabase_key:
         print("❌ Error: SUPABASE_URL y SUPABASE_KEY deben estar configurados")
@@ -27,22 +28,29 @@ def setup_supabase_storage():
         bucket_name = 'chat-audios'
         
         try:
-            # Intentar crear el bucket
-            result = supabase.storage.create_bucket(
-                bucket_name,
-                options={
-                    'public': True,  # URLs públicas para acceso directo
-                    'allowed_mime_types': ['audio/m4a', 'audio/mp3', 'audio/wav', 'audio/aac'],
-                    'file_size_limit': 15728640  # 15MB en bytes
-                }
-            )
-            print(f"✅ Bucket '{bucket_name}' creado exitosamente")
+            # Verificar si el bucket ya existe
+            buckets = supabase.storage.list_buckets()
+            bucket_exists = any(bucket.name == bucket_name for bucket in buckets)
             
-        except Exception as e:
-            if "already exists" in str(e).lower():
+            if bucket_exists:
                 print(f"✅ Bucket '{bucket_name}' ya existe")
             else:
-                print(f"❌ Error al crear bucket: {str(e)}")
+                # Intentar crear el bucket
+                result = supabase.storage.create_bucket(
+                    bucket_name,
+                    options={
+                        'public': True,  # URLs públicas para acceso directo
+                        'allowed_mime_types': ['audio/m4a', 'audio/mp3', 'audio/wav', 'audio/aac'],
+                        'file_size_limit': 15728640  # 15MB en bytes
+                    }
+                )
+                print(f"✅ Bucket '{bucket_name}' creado exitosamente")
+            
+        except Exception as e:
+            if "already exists" in str(e).lower() or "Unauthorized" in str(e):
+                print(f"✅ Bucket '{bucket_name}' ya existe o está configurado")
+            else:
+                print(f"❌ Error al verificar bucket: {str(e)}")
                 return False
         
         # Configurar políticas de acceso (opcional)

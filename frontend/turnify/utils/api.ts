@@ -34,10 +34,14 @@ export const apiRequest = async <T>(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 segundos de timeout
 
+    // Determinar si es FormData para no establecer Content-Type
+    const isFormData = options.body instanceof FormData;
+    
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: options.method || 'GET',
       headers: {
-        'Content-Type': 'application/json',
+        // Solo establecer Content-Type si NO es FormData
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...options.headers,
       },
       signal: controller.signal,

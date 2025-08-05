@@ -677,7 +677,7 @@ class ChatMessagesView(APIView):
             
             messages_data = []
             for message in messages:
-                messages_data.append({
+                message_data = {
                     'id': message.id,
                     'message': message.message,
                     'sender': {
@@ -687,7 +687,14 @@ class ChatMessagesView(APIView):
                     'timestamp': message.timestamp,
                     'is_read': message.is_read,
                     'message_type': message.message_type,
-                })
+                }
+                
+                # Agregar campos de audio si el mensaje es de tipo audio
+                if message.message_type == 'audio':
+                    message_data['audio_file'] = message.audio_file
+                    message_data['audio_duration'] = message.audio_duration
+                
+                messages_data.append(message_data)
             
             return Response({
                 'success': True,
@@ -746,18 +753,25 @@ class SendMessageView(APIView):
                     message=f'{request.user.name} te envió un mensaje',
                 )
             
+            message_data = {
+                'id': message.id,
+                'message': message.message,
+                'sender': {
+                    'id': message.sender.id,
+                    'name': message.sender.name,
+                },
+                'timestamp': message.timestamp,
+                'message_type': message.message_type,
+            }
+            
+            # Agregar campos de audio si el mensaje es de tipo audio
+            if message.message_type == 'audio':
+                message_data['audio_file'] = message.audio_file
+                message_data['audio_duration'] = message.audio_duration
+            
             return Response({
                 'success': True,
-                'message': {
-                    'id': message.id,
-                    'message': message.message,
-                    'sender': {
-                        'id': message.sender.id,
-                        'name': message.sender.name,
-                    },
-                    'timestamp': message.timestamp,
-                    'message_type': message.message_type,
-                }
+                'message': message_data
             })
             
         except ChatRoom.DoesNotExist:
@@ -872,8 +886,9 @@ class SendAudioMessageView(APIView):
             print(f"📏 Tamaño del archivo: {audio_file.size} bytes")
             
             # Configurar Supabase
-            supabase_url = os.environ.get('SUPABASE_URL')
-            supabase_key = os.environ.get('SUPABASE_KEY')
+            from decouple import config
+            supabase_url = config('SUPABASE_URL', default='')
+            supabase_key = config('SUPABASE_SERVICE_KEY', default='')  # Usar service key para backend
             
             print(f"🔧 CONFIGURACIÓN SUPABASE:")
             print(f"   URL: {supabase_url}")
@@ -920,13 +935,13 @@ class SendAudioMessageView(APIView):
                 return Response({'success': False, 'error': f'Error al subir audio: {str(e)}'}, status=500)
             
             message = ChatMessage.objects.create(
-                room=room,
-                sender=request.user,
-                message_type='audio',
-                message=f"Audio de {request.user.name}",
-                audio_file=audio_url,
-                audio_duration=float(duration) if duration else None,
-            )
+                 room=room,
+                 sender=request.user,
+                 message_type='audio',
+                 message="Audio",  # Mensaje simple para audio
+                 audio_file=audio_url,
+                 audio_duration=float(duration) if duration else None,
+             )
             
             print(f"💾 MENSAJE CREADO:")
             print(f"   ID: {message.id}")
